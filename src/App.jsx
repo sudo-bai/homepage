@@ -91,10 +91,9 @@ export default function App() {
     document.getElementsByTagName('head')[0].appendChild(link);
 
     // 3. 禁止浏览器自动翻译 (增强版)
-    document.documentElement.lang = "zh-CN"; // 明确声明为简体中文
+    document.documentElement.lang = "zh-CN"; 
     document.documentElement.setAttribute("translate", "no");
     
-    // 添加 Google 的禁止翻译 meta
     const metaGoogle = document.createElement('meta');
     metaGoogle.name = "google";
     metaGoogle.content = "notranslate";
@@ -142,7 +141,6 @@ export default function App() {
   const getBackgroundUrl = () => {
     switch (bgConfig.type) {
       case 'bing':
-        // 使用稳定的 Bing 镜像接口
         return 'https://bing.biturl.top/?resolution=1920&format=image&index=0&mkt=zh-CN';
       case 'api':
         return bgConfig.customApi || 'https://t.alcy.cc/ycy';
@@ -153,12 +151,11 @@ export default function App() {
     }
   };
 
-  // 处理图片上传
   const handleImageUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    if (file.size > 4 * 1024 * 1024) { // 限制 4MB
+    if (file.size > 4 * 1024 * 1024) { 
       alert("为了保证浏览器性能，请上传小于 4MB 的图片");
       return;
     }
@@ -170,7 +167,6 @@ export default function App() {
     reader.readAsDataURL(file);
   };
 
-  // 引擎切换逻辑
   const handleEngineChange = (engineKey) => {
     if (engineKey === 'custom') {
       if (!customEngineUrl) setIsCustomModalOpen(true);
@@ -226,7 +222,6 @@ export default function App() {
   const formatDate = (date) => date.toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' });
 
   return (
-    // notranslate 防止翻译
     <div className="min-h-screen w-full relative flex flex-col items-center font-sans overflow-hidden text-white selection:bg-pink-500 selection:text-white notranslate">
       {/* 背景图片 */}
       <div 
@@ -274,7 +269,8 @@ export default function App() {
             </button>
 
             {isEngineMenuOpen && (
-              <div className="absolute top-full left-0 mt-2 w-32 py-1 bg-gray-900/80 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl overflow-hidden animate-fade-in-down origin-top-left flex flex-col">
+              // 统一 UI: 搜索下拉菜单改为更通透的毛玻璃风格，去除 bg-gray-900，改用 bg-black/40
+              <div className="absolute top-full left-0 mt-2 w-32 py-1 bg-black/40 backdrop-blur-2xl border border-white/20 rounded-xl shadow-xl overflow-hidden animate-fade-in-down origin-top-left flex flex-col">
                 {Object.entries(engines).map(([key, engine]) => (
                   <button
                     key={key}
@@ -295,7 +291,7 @@ export default function App() {
                       setIsCustomModalOpen(true);
                       setIsEngineMenuOpen(false);
                     }}
-                    className="w-full px-4 py-2 text-left text-[10px] text-white/40 hover:bg-white/5 hover:text-white/60 border-t border-white/5 flex items-center gap-1"
+                    className="w-full px-4 py-2 text-left text-[10px] text-white/40 hover:bg-white/5 hover:text-white/60 border-t border-white/10 flex items-center gap-1"
                   >
                     <Settings size={10} /> 配置地址
                   </button>
@@ -308,11 +304,9 @@ export default function App() {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            // 交互：聚焦或点击时展开 Dashboard
             onFocus={() => setShowDashboard(true)}
             onClick={() => setShowDashboard(true)}
             placeholder={engines[searchEngine].placeholder}
-            // 样式：pl-32 留给左侧按钮，textAlign: center 居中显示
             className="w-full py-3.5 pl-32 pr-12 bg-black/20 border border-white/10 backdrop-blur-md rounded-full text-white placeholder-white/30 shadow-lg focus:outline-none focus:bg-black/40 focus:border-white/30 focus:shadow-2xl transition-all duration-300 text-sm"
             style={{ textAlign: 'center' }} 
           />
@@ -328,13 +322,10 @@ export default function App() {
         {/* 仪表盘区域 (包含设置按钮和捷径) */}
         <div className={`w-full max-w-2xl mt-8 transition-all duration-500 ease-spring transform origin-top relative ${showDashboard ? 'opacity-100 scale-100 translate-y-0 pointer-events-auto' : 'opacity-0 scale-90 -translate-y-8 pointer-events-none h-0'}`}>
           
-          {/* 顶部工具栏：显示标题 + 设置按钮 + 管理按钮 */}
           <div className="flex justify-between items-center mb-3 px-2">
-            {/* 汉化 Quick Links -> 快捷导航 */}
             <h2 className="text-white/50 text-[10px] font-medium tracking-wider uppercase">快捷导航</h2>
             
             <div className="flex items-center gap-2">
-              {/* 全局设置按钮 */}
               <button
                 onClick={() => setIsSettingsOpen(true)}
                 className="p-1.5 rounded-full text-white/40 hover:text-white hover:bg-white/10 transition-colors"
@@ -343,7 +334,6 @@ export default function App() {
                 <Settings size={14} />
               </button>
 
-              {/* 捷径管理按钮 */}
               <button 
                 onClick={() => setEditMode(!editMode)}
                 className={`px-3 py-1 text-[10px] rounded-full transition-all duration-300 border border-transparent ${editMode ? 'bg-red-500/80 text-white' : 'hover:bg-white/10 text-white/40 hover:text-white hover:border-white/10'}`}
@@ -389,7 +379,6 @@ export default function App() {
               <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center mb-1 group-hover:scale-110 transition-transform">
                 <Plus size={16} className="text-white/40" />
               </div>
-              {/* 汉化 Add -> 添加 */}
               <span className="text-white/30 text-[10px] group-hover:text-white/60 transition-colors">添加</span>
             </button>
           </div>
@@ -400,11 +389,11 @@ export default function App() {
         Skadi's home page
       </div>
 
-      {/* 捷径添加弹窗 */}
+      {/* 捷径添加弹窗 - 统一 UI */}
       {isModalOpen && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setIsModalOpen(false)}></div>
-          <div className="relative w-full max-w-xs bg-gray-900/90 backdrop-blur-xl border border-white/10 rounded-2xl p-5 shadow-2xl animate-bounce-in">
+          <div className="relative w-full max-w-xs bg-black/40 backdrop-blur-2xl border border-white/20 rounded-2xl p-5 shadow-2xl animate-bounce-in">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-base font-semibold text-white">添加新捷径</h3>
               <button onClick={() => setIsModalOpen(false)} className="text-white/50 hover:text-white"><X size={18} /></button>
@@ -418,11 +407,11 @@ export default function App() {
         </div>
       )}
 
-      {/* 自定义搜索弹窗 */}
+      {/* 自定义搜索弹窗 - 统一 UI */}
       {isCustomModalOpen && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setIsCustomModalOpen(false)}></div>
-          <div className="relative w-full max-w-xs bg-gray-900/90 backdrop-blur-xl border border-white/10 rounded-2xl p-5 shadow-2xl animate-bounce-in">
+          <div className="relative w-full max-w-xs bg-black/40 backdrop-blur-2xl border border-white/20 rounded-2xl p-5 shadow-2xl animate-bounce-in">
              <div className="flex justify-between items-center mb-4">
               <h3 className="text-base font-semibold text-white">自定义搜索引擎</h3>
               <button onClick={() => setIsCustomModalOpen(false)} className="text-white/50 hover:text-white"><X size={18} /></button>
@@ -434,11 +423,11 @@ export default function App() {
         </div>
       )}
 
-      {/* 背景设置弹窗 (新增) */}
+      {/* 背景设置弹窗 - 统一 UI */}
       {isSettingsOpen && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setIsSettingsOpen(false)}></div>
-          <div className="relative w-full max-w-sm bg-gray-900/90 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-2xl animate-bounce-in">
+          <div className="relative w-full max-w-sm bg-black/40 backdrop-blur-2xl border border-white/20 rounded-2xl p-6 shadow-2xl animate-bounce-in">
             <div className="flex justify-between items-center mb-6">
               <h3 className="text-lg font-semibold text-white flex items-center gap-2">
                 <ImageIcon size={18} /> 背景设置
