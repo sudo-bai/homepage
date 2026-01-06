@@ -256,27 +256,29 @@ export default function App() {
         </div>
 
         {/* 搜索框区域 */}
-        <form onSubmit={handleSearch} className="w-full max-w-md relative flex items-center z-30 transition-all duration-500 group">
+         <form onSubmit={handleSearch} className="w-full max-w-md relative flex items-center z-30 transition-all duration-500 group">
           
           <div className="absolute left-1.5 top-1.5 bottom-1.5 z-50">
             <button
               type="button"
               onClick={() => setIsEngineMenuOpen(!isEngineMenuOpen)}
-              className="h-full flex items-center gap-1.5 px-3.5 text-xs font-medium text-white/90 bg-white/10 hover:bg-white/20 hover:text-white rounded-full transition-all backdrop-blur-md border border-white/10 shadow-sm active:scale-95"
+              className="h-full flex items-center gap-1.5 px-3.5 text-xs font-medium text-white/90 bg-white/10 hover:bg-white/20 hover:text-white rounded-full transition-all backdrop-blur-md border border-white/10 shadow-sm active:scale-95 focus:outline-none focus:ring-0"
             >
               <span className="truncate max-w-[4rem] text-center">{engines[searchEngine].name}</span>
               <ChevronDown size={12} className={`opacity-60 transition-transform duration-200 ${isEngineMenuOpen ? 'rotate-180' : ''}`}/>
             </button>
 
             {isEngineMenuOpen && (
-              // 统一 UI: 搜索下拉菜单改为更通透的毛玻璃风格，去除 bg-gray-900，改用 bg-black/40
-              <div className="absolute top-full left-0 mt-2 w-32 py-1 bg-black/40 backdrop-blur-2xl border border-white/20 rounded-xl shadow-xl overflow-hidden animate-fade-in-down origin-top-left flex flex-col">
+              // 统一 UI: 搜索下拉菜单
+              // 修复点：稍微调整 mt-2 为 mt-3 增加一点间距，确保阴影不被截断，并添加 z-50 确保层级
+              <div className="absolute top-full left-0 mt-3 w-32 py-1 bg-black/60 backdrop-blur-2xl border border-white/20 rounded-xl shadow-2xl overflow-hidden animate-fade-in-down origin-top-left flex flex-col z-50">
                 {Object.entries(engines).map(([key, engine]) => (
                   <button
                     key={key}
                     type="button"
                     onClick={() => handleEngineChange(key)}
-                    className="w-full px-4 py-2.5 text-left text-xs text-white/80 hover:bg-white/10 hover:text-white flex items-center justify-between transition-colors"
+                    // 修复点：给选项也加上 focus:outline-none 防止键盘操作时出现边框
+                    className="w-full px-4 py-2.5 text-left text-xs text-white/80 hover:bg-white/15 hover:text-white flex items-center justify-between transition-colors focus:outline-none"
                   >
                     <span className="truncate">{engine.name}</span>
                     {searchEngine === key && <Check size={10} className="text-green-400 shrink-0" />}
@@ -291,7 +293,7 @@ export default function App() {
                       setIsCustomModalOpen(true);
                       setIsEngineMenuOpen(false);
                     }}
-                    className="w-full px-4 py-2 text-left text-[10px] text-white/40 hover:bg-white/5 hover:text-white/60 border-t border-white/10 flex items-center gap-1"
+                    className="w-full px-4 py-2 text-left text-[10px] text-white/40 hover:bg-white/10 hover:text-white/60 border-t border-white/10 flex items-center gap-1 focus:outline-none"
                   >
                     <Settings size={10} /> 配置地址
                   </button>
@@ -307,13 +309,14 @@ export default function App() {
             onFocus={() => setShowDashboard(true)}
             onClick={() => setShowDashboard(true)}
             placeholder={engines[searchEngine].placeholder}
+            // 修复点：确保 input 也有 focus:outline-none (虽然代码里已经处理了 focus 样式，但加一层保险)
             className="w-full py-3.5 pl-32 pr-12 bg-black/20 border border-white/10 backdrop-blur-md rounded-full text-white placeholder-white/30 shadow-lg focus:outline-none focus:bg-black/40 focus:border-white/30 focus:shadow-2xl transition-all duration-300 text-sm"
             style={{ textAlign: 'center' }} 
           />
           
           <button 
             type="submit"
-            className="absolute right-3.5 p-1.5 text-white/40 hover:text-white transition-colors bg-white/5 rounded-full hover:bg-white/10"
+            className="absolute right-3.5 p-1.5 text-white/40 hover:text-white transition-colors bg-white/5 rounded-full hover:bg-white/10 focus:outline-none"
           >
             <Search size={16} />
           </button>
