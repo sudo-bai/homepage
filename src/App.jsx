@@ -297,9 +297,13 @@ export default function App() {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            // 交互：聚焦或点击时展开 Dashboard
+            onFocus={() => setShowDashboard(true)}
+            onClick={() => setShowDashboard(true)}
             placeholder={engines[searchEngine].placeholder}
+            // 样式：pl-32 留给左侧按钮，textAlign: center 居中显示
             className="w-full py-3.5 pl-32 pr-12 bg-black/20 border border-white/10 backdrop-blur-md rounded-full text-white placeholder-white/30 shadow-lg focus:outline-none focus:bg-black/40 focus:border-white/30 focus:shadow-2xl transition-all duration-300 text-sm"
-            style={{ textAlign: 'left' }} 
+            style={{ textAlign: 'center' }} 
           />
           
           <button 
