@@ -65,10 +65,10 @@ export default function App() {
     uploadData: '' // Base64 string
   });
 
-  // 搜索引擎配置
+  // 搜索引擎配置 - 彻底汉化 placeholder
   const engines = {
     baidu: { name: '百度', url: 'https://www.baidu.com/s?wd=', placeholder: '百度一下' },
-    google: { name: 'Google', url: 'https://www.google.com/search?q=', placeholder: 'Search Google' },
+    google: { name: 'Google', url: 'https://www.google.com/search?q=', placeholder: 'Google 搜索' },
     bing: { name: 'Bing', url: 'https://www.bing.com/search?q=', placeholder: '微软 Bing' },
     custom: { name: '自定义', url: customEngineUrl, placeholder: '自定义搜索' },
   };
@@ -78,7 +78,7 @@ export default function App() {
     { id: 2, title: 'GitHub', url: 'https://github.com' },
   ];
 
-  // 初始化设置：标题、图标、本地存储、防翻译
+  // 初始化设置
   useEffect(() => {
     // 1. 设置网站标题
     document.title = "Skadi's home page";
@@ -90,13 +90,15 @@ export default function App() {
     link.href = 'https://blog.skadi.ltd/wp-content/uploads/2025/12/Gemini_Generated_Image_c428t9c428t9c428.png';
     document.getElementsByTagName('head')[0].appendChild(link);
 
-    // 3. 禁止浏览器自动翻译 (关键修改)
-    document.documentElement.lang = "zh"; // 声明语言为中文
-    document.documentElement.setAttribute("translate", "no"); // 标准禁止翻译属性
-    const meta = document.createElement('meta');
-    meta.name = "google";
-    meta.content = "notranslate";
-    document.head.appendChild(meta);
+    // 3. 禁止浏览器自动翻译 (增强版)
+    document.documentElement.lang = "zh-CN"; // 明确声明为简体中文
+    document.documentElement.setAttribute("translate", "no");
+    
+    // 添加 Google 的禁止翻译 meta
+    const metaGoogle = document.createElement('meta');
+    metaGoogle.name = "google";
+    metaGoogle.content = "notranslate";
+    document.head.appendChild(metaGoogle);
 
     // 加载链接
     const savedLinks = localStorage.getItem('my-nav-links');
@@ -224,7 +226,7 @@ export default function App() {
   const formatDate = (date) => date.toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' });
 
   return (
-    // 添加 notranslate 类作为双重保险
+    // notranslate 防止翻译
     <div className="min-h-screen w-full relative flex flex-col items-center font-sans overflow-hidden text-white selection:bg-pink-500 selection:text-white notranslate">
       {/* 背景图片 */}
       <div 
@@ -328,7 +330,8 @@ export default function App() {
           
           {/* 顶部工具栏：显示标题 + 设置按钮 + 管理按钮 */}
           <div className="flex justify-between items-center mb-3 px-2">
-            <h2 className="text-white/50 text-[10px] font-medium tracking-wider uppercase">Quick Links</h2>
+            {/* 汉化 Quick Links -> 快捷导航 */}
+            <h2 className="text-white/50 text-[10px] font-medium tracking-wider uppercase">快捷导航</h2>
             
             <div className="flex items-center gap-2">
               {/* 全局设置按钮 */}
@@ -386,7 +389,8 @@ export default function App() {
               <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center mb-1 group-hover:scale-110 transition-transform">
                 <Plus size={16} className="text-white/40" />
               </div>
-              <span className="text-white/30 text-[10px] group-hover:text-white/60 transition-colors">Add</span>
+              {/* 汉化 Add -> 添加 */}
+              <span className="text-white/30 text-[10px] group-hover:text-white/60 transition-colors">添加</span>
             </button>
           </div>
         </div>
