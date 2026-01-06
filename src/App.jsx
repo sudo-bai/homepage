@@ -258,34 +258,36 @@ export default function App() {
 {/* 搜索框区域 */}
         <form onSubmit={handleSearch} className="w-full max-w-md relative flex items-center z-30 transition-all duration-500 group">
           
-          {/* 修复方案核心：
-             1. 外层容器加上 rounded-full，虽然它是不可见的，但这能提示浏览器它的形状。
-          */}
           <div className="absolute left-1.5 top-1.5 bottom-1.5 z-50 flex items-center rounded-full">
             <button
               type="button"
               onClick={() => setIsEngineMenuOpen(!isEngineMenuOpen)}
-              // ------------------------------------------------------------------------------------
-              // 关键修复点：
-              // 已移除 "backdrop-blur-md" 类。
-              // 原因：底下的 input 已经有模糊效果了，叠加模糊会导致 Chrome 渲染出矩形边框伪影。
-              // ------------------------------------------------------------------------------------
+              // 这里的样式保持之前的去模糊、去边框
               className="h-full flex items-center gap-1.5 px-3.5 text-xs font-medium text-white/90 bg-white/10 hover:bg-white/20 hover:text-white rounded-full transition-all border border-white/10 shadow-sm active:scale-95 focus:outline-none focus:ring-0"
-              style={{ outline: 'none' }} // 保持这个强制去边框，以防万一
+              style={{ outline: 'none' }}
             >
               <span className="truncate max-w-[4rem] text-center">{engines[searchEngine].name}</span>
               <ChevronDown size={12} className={`opacity-60 transition-transform duration-200 ${isEngineMenuOpen ? 'rotate-180' : ''}`}/>
             </button>
 
             {isEngineMenuOpen && (
-              // 下拉菜单
-              <div className="absolute top-full left-0 mt-3 w-32 py-1 bg-black/60 backdrop-blur-2xl border border-white/20 rounded-xl shadow-2xl overflow-hidden animate-fade-in-down origin-top-left flex flex-col z-50">
+              // -----------------------------------------------------------
+              // 【核心修复区域 - 下拉菜单】
+              // 1. 改为 p-1：给容器内部加一圈内边距，让里面的按钮碰不到边界
+              // -----------------------------------------------------------
+              <div className="absolute top-full left-0 mt-3 w-32 p-1 bg-black/60 backdrop-blur-2xl border border-white/20 rounded-xl shadow-2xl animate-fade-in-down origin-top-left flex flex-col z-50">
                 {Object.entries(engines).map(([key, engine]) => (
                   <button
                     key={key}
                     type="button"
                     onClick={() => handleEngineChange(key)}
-                    className="w-full px-4 py-2.5 text-left text-xs text-white/80 hover:bg-white/15 hover:text-white flex items-center justify-between transition-colors focus:outline-none"
+                    // -----------------------------------------------------------
+                    // 【核心修复区域 - 按钮】
+                    // 2. rounded-lg：把按钮自己变成圆角
+                    // 3. mb-0.5：给按钮之间加一点微小的缝隙
+                    // 这样背景色高亮时，就是一个独立的圆角矩形，完全不会触发浏览器的溢出切割 bug
+                    // -----------------------------------------------------------
+                    className="w-full px-3 py-2 text-left text-xs text-white/80 hover:bg-white/15 hover:text-white flex items-center justify-between transition-colors focus:outline-none rounded-lg mb-0.5"
                     style={{ outline: 'none' }}
                   >
                     <span className="truncate">{engine.name}</span>
@@ -301,7 +303,8 @@ export default function App() {
                       setIsCustomModalOpen(true);
                       setIsEngineMenuOpen(false);
                     }}
-                    className="w-full px-4 py-2 text-left text-[10px] text-white/40 hover:bg-white/10 hover:text-white/60 border-t border-white/10 flex items-center gap-1 focus:outline-none"
+                    // 同样的逻辑，去掉 border-t，改为 mt-1 分隔，加上圆角 rounded-lg
+                    className="w-full px-3 py-2 mt-1 text-left text-[10px] text-white/40 hover:bg-white/10 hover:text-white/60 bg-white/5 rounded-lg flex items-center gap-1 focus:outline-none"
                     style={{ outline: 'none' }}
                   >
                     <Settings size={10} /> 配置地址
@@ -318,7 +321,6 @@ export default function App() {
             onFocus={() => setShowDashboard(true)}
             onClick={() => setShowDashboard(true)}
             placeholder={engines[searchEngine].placeholder}
-            // Input 这里保留 backdrop-blur-md，因为它负责整体的模糊背景
             className="w-full py-3.5 pl-32 pr-12 bg-black/20 border border-white/10 backdrop-blur-md rounded-full text-white placeholder-white/30 shadow-lg focus:outline-none focus:bg-black/40 focus:border-white/30 focus:shadow-2xl transition-all duration-300 text-sm"
             style={{ textAlign: 'center', outline: 'none' }} 
           />
