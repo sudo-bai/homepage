@@ -76,7 +76,6 @@ export default function App() {
   const defaultLinks = [
     { id: 1, title: 'Bilibili', url: 'https://www.bilibili.com' },
     { id: 2, title: 'GitHub', url: 'https://github.com' },
-    { id: 3, title: '路由器', url: 'http://192.168.1.1' }, 
   ];
 
   // 初始化设置：标题、图标、本地存储、防翻译
