@@ -255,17 +255,23 @@ export default function App() {
           </p>
         </div>
 
-        {/* 搜索框区域 */}
-         <form onSubmit={handleSearch} className="w-full max-w-md relative flex items-center z-30 transition-all duration-500 group">
+{/* 搜索框区域 */}
+        <form onSubmit={handleSearch} className="w-full max-w-md relative flex items-center z-30 transition-all duration-500 group">
           
-          {/*给外层包裹容器加上 rounded-full，防止方形轮廓显形 */}
+          {/* 修复方案核心：
+             1. 外层容器加上 rounded-full，虽然它是不可见的，但这能提示浏览器它的形状。
+          */}
           <div className="absolute left-1.5 top-1.5 bottom-1.5 z-50 flex items-center rounded-full">
             <button
               type="button"
               onClick={() => setIsEngineMenuOpen(!isEngineMenuOpen)}
-              //移除 backdrop-blur-md (减少渲染层叠伪影)，保留圆角和颜色
-              //保留之前的 focus:outline-none 
+              // ------------------------------------------------------------------------------------
+              // 关键修复点：
+              // 已移除 "backdrop-blur-md" 类。
+              // 原因：底下的 input 已经有模糊效果了，叠加模糊会导致 Chrome 渲染出矩形边框伪影。
+              // ------------------------------------------------------------------------------------
               className="h-full flex items-center gap-1.5 px-3.5 text-xs font-medium text-white/90 bg-white/10 hover:bg-white/20 hover:text-white rounded-full transition-all border border-white/10 shadow-sm active:scale-95 focus:outline-none focus:ring-0"
+              style={{ outline: 'none' }} // 保持这个强制去边框，以防万一
             >
               <span className="truncate max-w-[4rem] text-center">{engines[searchEngine].name}</span>
               <ChevronDown size={12} className={`opacity-60 transition-transform duration-200 ${isEngineMenuOpen ? 'rotate-180' : ''}`}/>
@@ -280,6 +286,7 @@ export default function App() {
                     type="button"
                     onClick={() => handleEngineChange(key)}
                     className="w-full px-4 py-2.5 text-left text-xs text-white/80 hover:bg-white/15 hover:text-white flex items-center justify-between transition-colors focus:outline-none"
+                    style={{ outline: 'none' }}
                   >
                     <span className="truncate">{engine.name}</span>
                     {searchEngine === key && <Check size={10} className="text-green-400 shrink-0" />}
@@ -295,6 +302,7 @@ export default function App() {
                       setIsEngineMenuOpen(false);
                     }}
                     className="w-full px-4 py-2 text-left text-[10px] text-white/40 hover:bg-white/10 hover:text-white/60 border-t border-white/10 flex items-center gap-1 focus:outline-none"
+                    style={{ outline: 'none' }}
                   >
                     <Settings size={10} /> 配置地址
                   </button>
@@ -310,13 +318,15 @@ export default function App() {
             onFocus={() => setShowDashboard(true)}
             onClick={() => setShowDashboard(true)}
             placeholder={engines[searchEngine].placeholder}
+            // Input 这里保留 backdrop-blur-md，因为它负责整体的模糊背景
             className="w-full py-3.5 pl-32 pr-12 bg-black/20 border border-white/10 backdrop-blur-md rounded-full text-white placeholder-white/30 shadow-lg focus:outline-none focus:bg-black/40 focus:border-white/30 focus:shadow-2xl transition-all duration-300 text-sm"
-            style={{ textAlign: 'center' }} 
+            style={{ textAlign: 'center', outline: 'none' }} 
           />
           
           <button 
             type="submit"
             className="absolute right-3.5 p-1.5 text-white/40 hover:text-white transition-colors bg-white/5 rounded-full hover:bg-white/10 focus:outline-none"
+            style={{ outline: 'none' }}
           >
             <Search size={16} />
           </button>
