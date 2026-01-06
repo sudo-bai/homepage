@@ -58,6 +58,14 @@ export default function App() {
   const [customEngineUrl, setCustomEngineUrl] = useState('');
   const [isCustomModalOpen, setIsCustomModalOpen] = useState(false);
 
+  // 搜索预测状态
+  const [suggestions, setSuggestions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const searchContainerRef = useRef(null);
+  
+  // 派生状态：是否正在显示预测
+  const hasSuggestions = showSuggestions && suggestions.length > 0;
+
   // 背景配置状态
   const [bgConfig, setBgConfig] = useState({
     type: 'default', // default, bing, api, upload
@@ -120,7 +128,19 @@ export default function App() {
     }
     
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
-    return () => clearInterval(timer);
+
+    // 点击外部关闭搜索建议
+    const handleClickOutside = (event) => {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(event.target)) {
+        setShowSuggestions(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
   }, []);
 
   // 自动保存链接
@@ -136,6 +156,61 @@ export default function App() {
       alert("图片太大了，无法保存到本地缓存！请尝试压缩图片或使用较小的图片。");
     }
   }, [bgConfig]);
+
+  // 搜索预测逻辑 (JSONP)
+  useEffect(() => {
+    let script;
+    const fetchSuggestions = () => {
+      if (!searchQuery.trim()) {
+        setSuggestions([]);
+        return;
+      }
+
+      // 使用唯一的回调函数名
+      const callbackName = 'bing_suggestion_callback_' + Date.now();
+      
+      // 创建全局回调函数
+      window[callbackName] = (data) => {
+        // Bing 的数据结构通常是 { AS: { Results: [ { Suggests: [ ... ] } ] } }
+        const suggests = data?.AS?.Results?.[0]?.Suggests?.map(s => s.Txt) || [];
+        setSuggestions(suggests);
+        
+        // 清理
+        delete window[callbackName];
+        const existingScript = document.getElementById(callbackName);
+        if (existingScript) document.body.removeChild(existingScript);
+      };
+
+      script = document.createElement('script');
+      script.id = callbackName;
+      // 修复：直接使用 callbackName 字符串，确保 api 正确调用
+      script.src = `https://api.bing.com/qsonhs.aspx?type=cb&q=${encodeURIComponent(searchQuery)}&cb=${callbackName}`;
+      
+      // 添加错误处理
+      script.onerror = () => {
+         delete window[callbackName];
+         const existingScript = document.getElementById(callbackName);
+         if (existingScript) document.body.removeChild(existingScript);
+      };
+
+      document.body.appendChild(script);
+    };
+
+    // 防抖
+    const timeoutId = setTimeout(() => {
+      fetchSuggestions();
+    }, 300);
+
+    return () => {
+      clearTimeout(timeoutId);
+      if (script && script.parentNode) {
+        // 组件卸载时不一定要移除脚本，因为 JSONP 请求可能已经发出
+        // 但可以尝试清理
+        // script.parentNode.removeChild(script); 
+      }
+    };
+  }, [searchQuery]);
+
 
   // 计算当前背景 URL
   const getBackgroundUrl = () => {
@@ -205,12 +280,22 @@ export default function App() {
     if (updatedLinks.length === 0) localStorage.removeItem('my-nav-links'); 
   };
 
-  const handleSearch = (e) => {
-    e.preventDefault();
-    if (!searchQuery.trim()) return;
+  const executeSearch = (query) => {
+    if (!query.trim()) return;
     let engineUrl = engines[searchEngine].url;
     if (!engineUrl) engineUrl = engines['baidu'].url; 
-    window.location.href = `${engineUrl}${encodeURIComponent(searchQuery)}`;
+    window.location.href = `${engineUrl}${encodeURIComponent(query)}`;
+  }
+
+  const handleSearch = (e) => {
+    e.preventDefault();
+    executeSearch(searchQuery);
+  };
+
+  const handleSuggestionClick = (suggestion) => {
+    setSearchQuery(suggestion);
+    setShowSuggestions(false);
+    executeSearch(suggestion);
   };
 
   const toggleDashboard = () => {
@@ -255,83 +340,117 @@ export default function App() {
           </p>
         </div>
 
-{/* 搜索框区域 */}
-        <form onSubmit={handleSearch} className="w-full max-w-md relative flex items-center z-30 transition-all duration-500 group">
-          
-          <div className="absolute left-1.5 top-1.5 bottom-1.5 z-50 flex items-center rounded-full">
-            <button
-              type="button"
-              onClick={() => setIsEngineMenuOpen(!isEngineMenuOpen)}
-              className="h-full flex items-center gap-1.5 px-3.5 text-xs font-medium text-white/90 bg-white/10 hover:bg-white/20 hover:text-white rounded-full transition-all border border-white/10 shadow-sm active:scale-95 focus:outline-none focus:ring-0"
+        {/* 搜索框区域 - 添加 ref 以处理点击外部关闭 */}
+        <div ref={searchContainerRef} className="w-full max-w-md relative z-30 transition-all duration-500 group">
+          <form onSubmit={handleSearch} className="relative w-full flex items-center z-50">
+            
+            <div className="absolute left-1.5 top-1.5 bottom-1.5 z-50 flex items-center rounded-full">
+              <button
+                type="button"
+                onClick={() => setIsEngineMenuOpen(!isEngineMenuOpen)}
+                className="h-full flex items-center gap-1.5 px-3.5 text-xs font-medium text-white/90 bg-white/10 hover:bg-white/20 hover:text-white rounded-full transition-all border border-white/10 shadow-sm active:scale-95 focus:outline-none focus:ring-0 relative z-50"
+                style={{ outline: 'none' }}
+              >
+                <span className="truncate max-w-[4rem] text-center">{engines[searchEngine].name}</span>
+                <ChevronDown size={12} className={`opacity-60 transition-transform duration-200 ${isEngineMenuOpen ? 'rotate-180' : ''}`}/>
+              </button>
+
+              {isEngineMenuOpen && (
+                <div 
+                  className="absolute top-full left-0 mt-2 w-32 p-1 bg-black/20 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl animate-fade-in-down origin-top-left flex flex-col z-40"
+                  // 移除 clipPath，因为悬浮菜单不需要切除顶部阴影，保留阴影会更自然
+                >
+                  {Object.entries(engines).map(([key, engine]) => (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => handleEngineChange(key)}
+                      className="w-full px-3 py-2 text-left text-xs text-white/80 hover:bg-white/15 hover:text-white flex items-center justify-between transition-colors focus:outline-none rounded-lg mb-0.5"
+                      style={{ outline: 'none' }}
+                    >
+                      <span className="truncate">{engine.name}</span>
+                      {searchEngine === key && <Check size={10} className="text-green-400 shrink-0" />}
+                    </button>
+                  ))}
+                  
+                  {searchEngine === 'custom' && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setIsCustomModalOpen(true);
+                        setIsEngineMenuOpen(false);
+                      }}
+                      className="w-full px-3 py-2 mt-1 text-left text-[10px] text-white/40 hover:bg-white/10 hover:text-white/60 bg-white/5 rounded-lg flex items-center gap-1 focus:outline-none"
+                      style={{ outline: 'none' }}
+                    >
+                      <Settings size={10} /> 配置地址
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <input
+              type="text"
+              name="search"
+              id="search-input"
+              autoComplete="off"
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                // 输入时如果有内容则显示建议
+                if (e.target.value.trim()) setShowSuggestions(true);
+              }}
+              onFocus={() => {
+                setShowDashboard(true);
+                // 聚焦时如果已有建议则显示
+                if (suggestions.length > 0) setShowSuggestions(true);
+              }}
+              onClick={() => setShowDashboard(true)}
+              placeholder={engines[searchEngine].placeholder}
+              className={`w-full py-3.5 pl-32 pr-12 backdrop-blur-md text-white placeholder-white/30 shadow-lg focus:outline-none transition-all duration-300 text-sm 
+                ${hasSuggestions 
+                  ? 'bg-black/40 border border-white/20 border-b-0 rounded-t-3xl rounded-b-none focus:shadow-none' 
+                  : 'bg-black/20 border border-white/10 rounded-full focus:bg-black/40 focus:border-white/30 focus:shadow-2xl'}`}
+              style={{ textAlign: 'center', outline: 'none' }} 
+            />
+            
+            <button 
+              type="submit"
+              className="absolute right-3.5 p-1.5 text-white/40 hover:text-white transition-colors bg-white/5 rounded-full hover:bg-white/10 focus:outline-none"
               style={{ outline: 'none' }}
             >
-              <span className="truncate max-w-[4rem] text-center">{engines[searchEngine].name}</span>
-              <ChevronDown size={12} className={`opacity-60 transition-transform duration-200 ${isEngineMenuOpen ? 'rotate-180' : ''}`}/>
+              <Search size={16} />
             </button>
+          </form>
 
-            {isEngineMenuOpen && (
-              <div className="absolute top-full left-0 mt-3 w-32 p-1 bg-black/60 backdrop-blur-2xl border border-white/20 rounded-xl shadow-2xl animate-fade-in-down origin-top-left flex flex-col z-50">
-                {Object.entries(engines).map(([key, engine]) => (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => handleEngineChange(key)}
-                    className="w-full px-3 py-2 text-left text-xs text-white/80 hover:bg-white/15 hover:text-white flex items-center justify-between transition-colors focus:outline-none rounded-lg mb-0.5"
-                    style={{ outline: 'none' }}
-                  >
-                    <span className="truncate">{engine.name}</span>
-                    {searchEngine === key && <Check size={10} className="text-green-400 shrink-0" />}
-                  </button>
-                ))}
-                
-                {searchEngine === 'custom' && (
-                   <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setIsCustomModalOpen(true);
-                      setIsEngineMenuOpen(false);
-                    }}
-                    className="w-full px-3 py-2 mt-1 text-left text-[10px] text-white/40 hover:bg-white/10 hover:text-white/60 bg-white/5 rounded-lg flex items-center gap-1 focus:outline-none"
-                    style={{ outline: 'none' }}
-                  >
-                    <Settings size={10} /> 配置地址
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
+          {/* 搜索预测下拉列表 - 修改样式以匹配拉伸效果 */}
+          {hasSuggestions && (
+            <div 
+              className="absolute top-full left-0 w-full bg-black/40 backdrop-blur-md border border-t-0 border-white/20 rounded-b-3xl shadow-xl overflow-hidden z-40 origin-top"
+              style={{ clipPath: 'inset(0px -50px -50px -50px)' }} 
+            >
+              {suggestions.map((suggestion, index) => (
+                <div
+                  key={index}
+                  onClick={() => handleSuggestionClick(suggestion)}
+                  className="px-4 py-2.5 text-sm text-white/80 hover:bg-white/10 hover:text-white cursor-pointer transition-colors flex items-center gap-3"
+                >
+                  <Search size={12} className="opacity-40" />
+                  <span className="truncate">{suggestion}</span>
+                </div>
+              ))}
+              <div className="h-2"></div> {/* 底部留白 */}
+            </div>
+          )}
+        </div>
 
-          <input
-            type="text"
-            // ---------------------------------------------------
-            // 【修复点】：添加 name 和 id 属性
-            // 这告诉浏览器这个输入框是用来做 "search" 的，消除了那个 Warning
-            // ---------------------------------------------------
-            name="search"
-            id="search-input"
-            autoComplete="off" // 可选：如果你不想让浏览器弹出历史记录，加上这个
-            // ---------------------------------------------------
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            onFocus={() => setShowDashboard(true)}
-            onClick={() => setShowDashboard(true)}
-            placeholder={engines[searchEngine].placeholder}
-            className="w-full py-3.5 pl-32 pr-12 bg-black/20 border border-white/10 backdrop-blur-md rounded-full text-white placeholder-white/30 shadow-lg focus:outline-none focus:bg-black/40 focus:border-white/30 focus:shadow-2xl transition-all duration-300 text-sm"
-            style={{ textAlign: 'center', outline: 'none' }} 
-          />
-          
-          <button 
-            type="submit"
-            className="absolute right-3.5 p-1.5 text-white/40 hover:text-white transition-colors bg-white/5 rounded-full hover:bg-white/10 focus:outline-none"
-            style={{ outline: 'none' }}
-          >
-            <Search size={16} />
-          </button>
-        </form>
-
-        {/* 仪表盘区域 (包含设置按钮和捷径) */}
-        <div className={`w-full max-w-2xl mt-8 transition-all duration-500 ease-spring transform origin-top relative ${showDashboard ? 'opacity-100 scale-100 translate-y-0 pointer-events-auto' : 'opacity-0 scale-90 -translate-y-8 pointer-events-none h-0'}`}>
+        {/* 仪表盘区域 (包含设置按钮和捷径) - 当有预测词时隐藏 */}
+        <div className={`w-full max-w-2xl mt-8 transition-all duration-500 ease-spring transform origin-top relative 
+          ${showDashboard && !hasSuggestions 
+            ? 'opacity-100 scale-100 translate-y-0 pointer-events-auto' 
+            : 'opacity-0 scale-90 -translate-y-8 pointer-events-none h-0'}`}>
           
           <div className="flex justify-between items-center mb-3 px-2">
             <h2 className="text-white/50 text-[10px] font-medium tracking-wider uppercase">快捷导航</h2>
