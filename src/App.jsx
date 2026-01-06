@@ -262,7 +262,6 @@ export default function App() {
             <button
               type="button"
               onClick={() => setIsEngineMenuOpen(!isEngineMenuOpen)}
-              // 这里的样式保持之前的去模糊、去边框
               className="h-full flex items-center gap-1.5 px-3.5 text-xs font-medium text-white/90 bg-white/10 hover:bg-white/20 hover:text-white rounded-full transition-all border border-white/10 shadow-sm active:scale-95 focus:outline-none focus:ring-0"
               style={{ outline: 'none' }}
             >
@@ -271,22 +270,12 @@ export default function App() {
             </button>
 
             {isEngineMenuOpen && (
-              // -----------------------------------------------------------
-              // 【核心修复区域 - 下拉菜单】
-              // 1. 改为 p-1：给容器内部加一圈内边距，让里面的按钮碰不到边界
-              // -----------------------------------------------------------
               <div className="absolute top-full left-0 mt-3 w-32 p-1 bg-black/60 backdrop-blur-2xl border border-white/20 rounded-xl shadow-2xl animate-fade-in-down origin-top-left flex flex-col z-50">
                 {Object.entries(engines).map(([key, engine]) => (
                   <button
                     key={key}
                     type="button"
                     onClick={() => handleEngineChange(key)}
-                    // -----------------------------------------------------------
-                    // 【核心修复区域 - 按钮】
-                    // 2. rounded-lg：把按钮自己变成圆角
-                    // 3. mb-0.5：给按钮之间加一点微小的缝隙
-                    // 这样背景色高亮时，就是一个独立的圆角矩形，完全不会触发浏览器的溢出切割 bug
-                    // -----------------------------------------------------------
                     className="w-full px-3 py-2 text-left text-xs text-white/80 hover:bg-white/15 hover:text-white flex items-center justify-between transition-colors focus:outline-none rounded-lg mb-0.5"
                     style={{ outline: 'none' }}
                   >
@@ -303,7 +292,6 @@ export default function App() {
                       setIsCustomModalOpen(true);
                       setIsEngineMenuOpen(false);
                     }}
-                    // 同样的逻辑，去掉 border-t，改为 mt-1 分隔，加上圆角 rounded-lg
                     className="w-full px-3 py-2 mt-1 text-left text-[10px] text-white/40 hover:bg-white/10 hover:text-white/60 bg-white/5 rounded-lg flex items-center gap-1 focus:outline-none"
                     style={{ outline: 'none' }}
                   >
@@ -316,6 +304,14 @@ export default function App() {
 
           <input
             type="text"
+            // ---------------------------------------------------
+            // 【修复点】：添加 name 和 id 属性
+            // 这告诉浏览器这个输入框是用来做 "search" 的，消除了那个 Warning
+            // ---------------------------------------------------
+            name="search"
+            id="search-input"
+            autoComplete="off" // 可选：如果你不想让浏览器弹出历史记录，加上这个
+            // ---------------------------------------------------
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             onFocus={() => setShowDashboard(true)}
