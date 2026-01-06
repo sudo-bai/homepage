@@ -76,19 +76,28 @@ export default function App() {
   const defaultLinks = [
     { id: 1, title: 'Bilibili', url: 'https://www.bilibili.com' },
     { id: 2, title: 'GitHub', url: 'https://github.com' },
+    { id: 3, title: '路由器', url: 'http://192.168.1.1' }, 
   ];
 
-  // 初始化设置：标题、图标、本地存储
+  // 初始化设置：标题、图标、本地存储、防翻译
   useEffect(() => {
-    // 设置网站标题
+    // 1. 设置网站标题
     document.title = "Skadi's home page";
     
-    // 设置网站 Favicon
+    // 2. 设置网站 Favicon
     const link = document.querySelector("link[rel~='icon']") || document.createElement('link');
     link.type = 'image/png';
     link.rel = 'icon';
     link.href = 'https://blog.skadi.ltd/wp-content/uploads/2025/12/Gemini_Generated_Image_c428t9c428t9c428.png';
     document.getElementsByTagName('head')[0].appendChild(link);
+
+    // 3. 禁止浏览器自动翻译 (关键修改)
+    document.documentElement.lang = "zh"; // 声明语言为中文
+    document.documentElement.setAttribute("translate", "no"); // 标准禁止翻译属性
+    const meta = document.createElement('meta');
+    meta.name = "google";
+    meta.content = "notranslate";
+    document.head.appendChild(meta);
 
     // 加载链接
     const savedLinks = localStorage.getItem('my-nav-links');
@@ -216,7 +225,8 @@ export default function App() {
   const formatDate = (date) => date.toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' });
 
   return (
-    <div className="min-h-screen w-full relative flex flex-col items-center font-sans overflow-hidden text-white selection:bg-pink-500 selection:text-white">
+    // 添加 notranslate 类作为双重保险
+    <div className="min-h-screen w-full relative flex flex-col items-center font-sans overflow-hidden text-white selection:bg-pink-500 selection:text-white notranslate">
       {/* 背景图片 */}
       <div 
         className="absolute inset-0 z-0 bg-cover bg-center transition-all duration-700 ease-in-out"
