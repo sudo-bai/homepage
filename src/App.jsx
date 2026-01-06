@@ -258,27 +258,31 @@ export default function App() {
         {/* 搜索框区域 */}
          <form onSubmit={handleSearch} className="w-full max-w-md relative flex items-center z-30 transition-all duration-500 group">
           
-          <div className="absolute left-1.5 top-1.5 bottom-1.5 z-50">
+          <div className="absolute left-1.5 top-1.5 bottom-1.5 z-50 flex items-center">
             <button
               type="button"
               onClick={() => setIsEngineMenuOpen(!isEngineMenuOpen)}
-              className="h-full flex items-center gap-1.5 px-3.5 text-xs font-medium text-white/90 bg-white/10 hover:bg-white/20 hover:text-white rounded-full transition-all backdrop-blur-md border border-white/10 shadow-sm active:scale-95 focus:outline-none focus:ring-0"
+              // 修复核心：
+              // 1. 添加 focus-visible:outline-none 和 focus-visible:ring-0
+              // 2. 保留 rounded-full 确保背景是圆的
+              className="h-full flex items-center gap-1.5 px-3.5 text-xs font-medium text-white/90 bg-white/10 hover:bg-white/20 hover:text-white rounded-full transition-all backdrop-blur-md border border-white/10 shadow-sm active:scale-95 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0"
+              // 3. 双重保险：内联样式强制移除 outline，防止浏览器特定行为
+              style={{ outline: 'none', border: '1px solid rgba(255,255,255,0.1)' }}
             >
               <span className="truncate max-w-[4rem] text-center">{engines[searchEngine].name}</span>
               <ChevronDown size={12} className={`opacity-60 transition-transform duration-200 ${isEngineMenuOpen ? 'rotate-180' : ''}`}/>
             </button>
 
             {isEngineMenuOpen && (
-              // 统一 UI: 搜索下拉菜单
-              // 修复点：稍微调整 mt-2 为 mt-3 增加一点间距，确保阴影不被截断，并添加 z-50 确保层级
               <div className="absolute top-full left-0 mt-3 w-32 py-1 bg-black/60 backdrop-blur-2xl border border-white/20 rounded-xl shadow-2xl overflow-hidden animate-fade-in-down origin-top-left flex flex-col z-50">
                 {Object.entries(engines).map(([key, engine]) => (
                   <button
                     key={key}
                     type="button"
                     onClick={() => handleEngineChange(key)}
-                    // 修复点：给选项也加上 focus:outline-none 防止键盘操作时出现边框
-                    className="w-full px-4 py-2.5 text-left text-xs text-white/80 hover:bg-white/15 hover:text-white flex items-center justify-between transition-colors focus:outline-none"
+                    // 下拉菜单项也加上强制无边框
+                    className="w-full px-4 py-2.5 text-left text-xs text-white/80 hover:bg-white/15 hover:text-white flex items-center justify-between transition-colors focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0"
+                    style={{ outline: 'none' }}
                   >
                     <span className="truncate">{engine.name}</span>
                     {searchEngine === key && <Check size={10} className="text-green-400 shrink-0" />}
@@ -293,7 +297,8 @@ export default function App() {
                       setIsCustomModalOpen(true);
                       setIsEngineMenuOpen(false);
                     }}
-                    className="w-full px-4 py-2 text-left text-[10px] text-white/40 hover:bg-white/10 hover:text-white/60 border-t border-white/10 flex items-center gap-1 focus:outline-none"
+                    className="w-full px-4 py-2 text-left text-[10px] text-white/40 hover:bg-white/10 hover:text-white/60 border-t border-white/10 flex items-center gap-1 focus:outline-none focus:ring-0 focus-visible:outline-none"
+                    style={{ outline: 'none' }}
                   >
                     <Settings size={10} /> 配置地址
                   </button>
@@ -309,14 +314,15 @@ export default function App() {
             onFocus={() => setShowDashboard(true)}
             onClick={() => setShowDashboard(true)}
             placeholder={engines[searchEngine].placeholder}
-            // 修复点：确保 input 也有 focus:outline-none (虽然代码里已经处理了 focus 样式，但加一层保险)
-            className="w-full py-3.5 pl-32 pr-12 bg-black/20 border border-white/10 backdrop-blur-md rounded-full text-white placeholder-white/30 shadow-lg focus:outline-none focus:bg-black/40 focus:border-white/30 focus:shadow-2xl transition-all duration-300 text-sm"
-            style={{ textAlign: 'center' }} 
+            // 输入框也加强去边框逻辑
+            className="w-full py-3.5 pl-32 pr-12 bg-black/20 border border-white/10 backdrop-blur-md rounded-full text-white placeholder-white/30 shadow-lg focus:outline-none focus:bg-black/40 focus:border-white/30 focus:shadow-2xl focus:ring-0 focus-visible:outline-none transition-all duration-300 text-sm"
+            style={{ textAlign: 'center', outline: 'none' }} 
           />
           
           <button 
             type="submit"
-            className="absolute right-3.5 p-1.5 text-white/40 hover:text-white transition-colors bg-white/5 rounded-full hover:bg-white/10 focus:outline-none"
+            className="absolute right-3.5 p-1.5 text-white/40 hover:text-white transition-colors bg-white/5 rounded-full hover:bg-white/10 focus:outline-none focus:ring-0 focus-visible:outline-none"
+            style={{ outline: 'none' }}
           >
             <Search size={16} />
           </button>
