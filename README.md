@@ -1,4 +1,4 @@
-# **React Personal Start Page (个人起始页)**
+# **Homepage (个人起始页)**
 
 这是一个基于 React、Vite 和 Tailwind CSS 构建的现代化浏览器起始页。它设计简洁、美观，支持高度自定义，旨在提供高效的上网体验。
 
