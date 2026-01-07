@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Plus, X, Search, Trash2, ChevronDown, Check, Settings, Globe, Image as ImageIcon, Upload, Monitor, RefreshCw } from 'lucide-react';
 
-// 独立的图标组件
+// 独立的图标组件 - 带本地缓存 + 国内线路优化版
 const SmartIcon = ({ url, title }) => {
   const [src, setSrc] = useState('');
   const [retryCount, setRetryCount] = useState(0);
+  const [isCached, setIsCached] = useState(false);
 
   // 提取域名的辅助函数
-  const getDomain = (link) => {
+  const getHostname = (link) => {
     try {
       return new URL(link).hostname;
     } catch (e) {
@@ -15,34 +16,49 @@ const SmartIcon = ({ url, title }) => {
     }
   };
 
-  useEffect(() => {
-    if (!url) return;
-    
-    // 重置状态
-    setRetryCount(0);
-    const domain = getDomain(url);
+  const hostname = getHostname(url);
+  // 使用特定的前缀作为缓存 Key，避免冲突
+  const cacheKey = `fav_cache_v1_${hostname}`;
 
-    // 策略 1: 使用 UOMG API (国内常用的 Favicon 抓取服务)
-    // 它的原理就是替你去访问网站并获取图标
-    const apiUrl = `https://api.uomg.com/api/get.favicon?url=${encodeURIComponent(url)}`;
-    setSrc(apiUrl);
+  useEffect(() => {
+    if (!url || !hostname) return;
     
-  }, [url]);
+    // 1. 尝试从本地缓存读取
+    try {
+      const cachedData = localStorage.getItem(cacheKey);
+      if (cachedData) {
+        setSrc(cachedData);
+        setIsCached(true);
+        return;
+      }
+    } catch (e) {
+      // 忽略存储读取错误
+    }
+
+    // 2. 如果没有缓存，开始获取流程
+    // 策略 1: 使用 UOMG API (国内稳定)
+    setSrc(`https://api.uomg.com/api/get.favicon?url=${encodeURIComponent(url)}`);
+    setRetryCount(0);
+    setIsCached(false);
+    
+  }, [url, hostname]);
 
   const handleError = () => {
-    const domain = getDomain(url);
-    if (!domain) {
-      setSrc('fallback');
+    // 如果是缓存的图片加载失败（比如缓存的 URL 过期了），清除缓存并重新开始
+    if (isCached) {
+      localStorage.removeItem(cacheKey);
+      setIsCached(false);
+      setRetryCount(0);
+      setSrc(`https://api.uomg.com/api/get.favicon?url=${encodeURIComponent(url)}`);
       return;
     }
 
     if (retryCount === 0) {
-      // 策略 2: 失败后，尝试另一个国内 API (一为 API)
-      setSrc(`https://api.iowen.cn/favicon/${domain}.png`);
+      // 策略 2: 失败后，尝试一为 API
+      setSrc(`https://api.iowen.cn/favicon/${hostname}.png`);
       setRetryCount(1);
     } else if (retryCount === 1) {
       // 策略 3: 尝试直接访问网站根目录的 favicon.ico
-      // 注意：部分网站因为防盗链(Referer)可能会加载失败
       try {
         const urlObj = new URL(url);
         setSrc(`${urlObj.origin}/favicon.ico`);
@@ -51,15 +67,58 @@ const SmartIcon = ({ url, title }) => {
       }
       setRetryCount(2);
     } else {
-      // 所有策略都失败，显示默认图标
+      // 所有策略都失败
       setSrc('fallback');
     }
   };
 
-  // 渲染 fallback 图标
+  const handleLoad = async (e) => {
+    // 如果已经是缓存的数据，或者显示的是默认地球图标，则不进行处理
+    if (isCached || src === 'fallback') return;
+
+    const currentSrc = e.target.src;
+
+    // 尝试将图片缓存到本地
+    try {
+      // 尝试 1: Fetch 图片并转为 Base64 (实现真正的离线缓存)
+      // 注意：这需要对方服务器支持 CORS，大多数 API 支持
+      const response = await fetch(currentSrc);
+      const blob = await response.blob();
+      
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        try {
+          const base64 = reader.result;
+          // 只有当图片大小合理时才缓存 (例如小于 50KB)，避免撑爆 localStorage
+          if (base64.length < 50 * 1024) { 
+             localStorage.setItem(cacheKey, base64);
+          } else {
+             // 图片太大，只缓存 URL
+             localStorage.setItem(cacheKey, currentSrc);
+          }
+        } catch (storageError) {
+          // 如果 localStorage 满了 (QuotaExceededError)，退而求其次缓存 URL
+          // 缓存 URL 也能避免下次重新走 retry 流程，速度依然很快
+          console.warn('LocalStorage full, caching URL only');
+          try {
+             localStorage.setItem(cacheKey, currentSrc);
+          } catch(e) {}
+        }
+      };
+      reader.readAsDataURL(blob);
+
+    } catch (corsError) {
+      // 尝试 2: 如果发生 CORS 错误（无法读取图片数据），则直接缓存当前有效的 URL
+      // 虽然不能离线，但下次加载时直接使用这个 URL，跳过了试错过程，速度也很快
+      try {
+        localStorage.setItem(cacheKey, currentSrc);
+      } catch (e) {}
+    }
+  };
+
   if (src === 'fallback') {
     return (
-      <div className="w-full h-full bg-white/10 flex items-center justify-center text-white/50 rounded-lg">
+      <div className="w-full h-full bg-white/20 flex items-center justify-center text-white/50 rounded-lg">
         <Globe size={16} />
       </div>
     );
@@ -71,6 +130,7 @@ const SmartIcon = ({ url, title }) => {
       alt={title} 
       className="w-6 h-6 object-contain rounded-sm" 
       onError={handleError}
+      onLoad={handleLoad}
       loading="lazy"
     />
   );
@@ -108,7 +168,7 @@ export default function App() {
     uploadData: '' // Base64 string
   });
 
-  // 搜索引擎配置 - 彻底汉化 placeholder
+  // 搜索引擎配置
   const engines = {
     baidu: { name: '百度', url: 'https://www.baidu.com/s?wd=', placeholder: '百度一下' },
     google: { name: 'Google', url: 'https://www.google.com/search?q=', placeholder: 'Google 搜索' },
@@ -133,7 +193,7 @@ export default function App() {
     link.href = 'https://blog.skadi.ltd/wp-content/uploads/2025/12/Gemini_Generated_Image_c428t9c428t9c428.png';
     document.getElementsByTagName('head')[0].appendChild(link);
 
-    // 3. 禁止浏览器自动翻译 (增强版)
+    // 3. 禁止浏览器自动翻译
     document.documentElement.lang = "zh-CN"; 
     document.documentElement.setAttribute("translate", "no");
     
@@ -201,16 +261,12 @@ export default function App() {
         return;
       }
 
-      // 使用唯一的回调函数名
       const callbackName = 'bing_suggestion_callback_' + Date.now();
       
-      // 创建全局回调函数
       window[callbackName] = (data) => {
-        // Bing 的数据结构通常是 { AS: { Results: [ { Suggests: [ ... ] } ] } }
         const suggests = data?.AS?.Results?.[0]?.Suggests?.map(s => s.Txt) || [];
         setSuggestions(suggests);
         
-        // 清理
         delete window[callbackName];
         const existingScript = document.getElementById(callbackName);
         if (existingScript) document.body.removeChild(existingScript);
@@ -218,10 +274,8 @@ export default function App() {
 
       script = document.createElement('script');
       script.id = callbackName;
-      // 修复：直接使用 callbackName 字符串，确保 api 正确调用
       script.src = `https://api.bing.com/qsonhs.aspx?type=cb&q=${encodeURIComponent(searchQuery)}&cb=${callbackName}`;
       
-      // 添加错误处理
       script.onerror = () => {
          delete window[callbackName];
          const existingScript = document.getElementById(callbackName);
@@ -231,18 +285,12 @@ export default function App() {
       document.body.appendChild(script);
     };
 
-    // 防抖
     const timeoutId = setTimeout(() => {
       fetchSuggestions();
     }, 300);
 
     return () => {
       clearTimeout(timeoutId);
-      if (script && script.parentNode) {
-        // 组件卸载时不一定要移除脚本，因为 JSONP 请求可能已经发出
-        // 但可以尝试清理
-        // script.parentNode.removeChild(script); 
-      }
     };
   }, [searchQuery]);
 
@@ -393,7 +441,6 @@ export default function App() {
               {isEngineMenuOpen && (
                 <div 
                   className="absolute top-full left-0 mt-2 w-32 p-1 bg-black/20 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl animate-fade-in-down origin-top-left flex flex-col z-40"
-                  // 移除 clipPath，因为悬浮菜单不需要切除顶部阴影，保留阴影会更自然
                 >
                   {Object.entries(engines).map(([key, engine]) => (
                     <button
