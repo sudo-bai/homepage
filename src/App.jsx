@@ -186,7 +186,7 @@ export default function App() {
     const link = document.querySelector("link[rel~='icon']") || document.createElement('link');
     link.type = 'image/png';
     link.rel = 'icon';
-    link.href = 'https://blog.skadi.ltd/wp-content/uploads/2025/12/Gemini_Generated_Image_c428t9c428t9c428.png';
+    link.href = 'https://blog.skadi.ltd/wp-content/uploads/2026/01/139527214_p0-scaled.png';
     document.getElementsByTagName('head')[0].appendChild(link);
     document.documentElement.lang = "zh-CN"; 
     document.documentElement.setAttribute("translate", "no");
