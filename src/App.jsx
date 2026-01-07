@@ -4,40 +4,75 @@ import { Plus, X, Search, Trash2, ChevronDown, Check, Settings, Globe, Image as 
 // 独立的图标组件
 const SmartIcon = ({ url, title }) => {
   const [src, setSrc] = useState('');
-  const [useLocal, setUseLocal] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
 
-  useEffect(() => {
+  // 提取域名的辅助函数
+  const getDomain = (link) => {
     try {
-      const domain = new URL(url).hostname;
-      setSrc(`https://www.google.com/s2/favicons?sz=128&domain=${domain}`);
-      setUseLocal(false);
+      return new URL(link).hostname;
     } catch (e) {
-      setSrc('fallback');
-    }
-  }, [url]);
-
-  const handleError = () => {
-    if (!useLocal) {
-      try {
-        const urlObj = new URL(url);
-        setSrc(`${urlObj.origin}/favicon.ico`);
-        setUseLocal(true);
-      } catch (e) {}
-    } else {
-      setSrc('fallback'); 
+      return '';
     }
   };
 
+  useEffect(() => {
+    if (!url) return;
+    
+    // 重置状态
+    setRetryCount(0);
+    const domain = getDomain(url);
+
+    // 策略 1: 使用 UOMG API (国内常用的 Favicon 抓取服务)
+    // 它的原理就是替你去访问网站并获取图标
+    const apiUrl = `https://api.uomg.com/api/get.favicon?url=${encodeURIComponent(url)}`;
+    setSrc(apiUrl);
+    
+  }, [url]);
+
+  const handleError = () => {
+    const domain = getDomain(url);
+    if (!domain) {
+      setSrc('fallback');
+      return;
+    }
+
+    if (retryCount === 0) {
+      // 策略 2: 失败后，尝试另一个国内 API (一为 API)
+      setSrc(`https://api.iowen.cn/favicon/${domain}.png`);
+      setRetryCount(1);
+    } else if (retryCount === 1) {
+      // 策略 3: 尝试直接访问网站根目录的 favicon.ico
+      // 注意：部分网站因为防盗链(Referer)可能会加载失败
+      try {
+        const urlObj = new URL(url);
+        setSrc(`${urlObj.origin}/favicon.ico`);
+      } catch (e) {
+        setSrc('fallback');
+      }
+      setRetryCount(2);
+    } else {
+      // 所有策略都失败，显示默认图标
+      setSrc('fallback');
+    }
+  };
+
+  // 渲染 fallback 图标
   if (src === 'fallback') {
     return (
-      <div className="w-full h-full bg-white/20 flex items-center justify-center text-white/50">
+      <div className="w-full h-full bg-white/10 flex items-center justify-center text-white/50 rounded-lg">
         <Globe size={16} />
       </div>
     );
   }
 
   return (
-    <img src={src} alt={title} className="w-6 h-6 object-contain" onError={handleError} />
+    <img 
+      src={src} 
+      alt={title} 
+      className="w-6 h-6 object-contain rounded-sm" 
+      onError={handleError}
+      loading="lazy"
+    />
   );
 };
 
