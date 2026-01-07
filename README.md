@@ -57,7 +57,7 @@
 
 这是最方便的方法，当你推送代码到 GitHub/GitLab 时，Cloudflare 会自动重新构建和部署。
 
-1. **准备代码**：将你的代码推送到 GitHub 或 GitLab 仓库。  
+1. **准备代码**：把这个项目fork一份。  
 2. **登录 Cloudflare**：访问 [Cloudflare Dashboard](https://dash.cloudflare.com/) 并登录。  
 3. **创建应用**：  
    * 在左侧菜单点击 **Workers & Pages**。  
