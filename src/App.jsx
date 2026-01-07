@@ -139,8 +139,8 @@ export default function App() {
   
   // editMode 现在同时控制：显示删除按钮 + 抖动动画 + 启用拖拽
   const [editMode, setEditMode] = useState(false); 
-  const dragItem = useRef(null); // 记录当前被拖拽的元素索引
-  const dragOverItem = useRef(null); // 记录拖拽经过的元素索引
+  const dragItem = useRef(null); 
+  const dragOverItem = useRef(null); 
 
   // 搜索相关
   const [searchQuery, setSearchQuery] = useState('');
@@ -180,7 +180,7 @@ export default function App() {
     { id: 2, title: 'GitHub', url: 'https://github.com' },
   ];
 
-  // 初始化
+  // 初始化设置与时间
   useEffect(() => {
     document.title = "Skadi's home page";
     const link = document.querySelector("link[rel~='icon']") || document.createElement('link');
@@ -206,33 +206,38 @@ export default function App() {
     const savedBgConfig = localStorage.getItem('bg-config');
     if (savedBgConfig) setBgConfig(JSON.parse(savedBgConfig));
     
+    // 独立的时间定时器，只在组件挂载时启动一次
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
+  // 独立的全局点击监听，处理菜单关闭
+  useEffect(() => {
     const handleGlobalClick = (event) => {
+      // 处理搜索建议关闭
       if (searchContainerRef.current && !searchContainerRef.current.contains(event.target)) {
         setShowSuggestions(false);
       }
+      
+      // 处理右键菜单关闭
       if (contextMenu.visible && contextMenuRef.current && !contextMenuRef.current.contains(event.target)) {
         setContextMenu({ ...contextMenu, visible: false });
       }
-      // 在编辑模式下，点击非网格区域退出编辑模式
-      // 这里简单处理：如果点击的是最外层容器(App的div)或者大的背景遮罩，就退出
-      // 但由于React事件冒泡，我们在grid container上阻止冒泡即可，这里不强制全局处理，依赖用户的"完成"按钮习惯
-      // 或者：如果点击的是背景（没有特定交互元素），退出编辑模式
+
+      // 处理编辑模式退出 (点击背景层)
       if (editMode && event.target.getAttribute('data-bg-layer') === 'true') {
         setEditMode(false);
       }
     };
     
     document.addEventListener('mousedown', handleGlobalClick);
-    document.addEventListener('click', handleGlobalClick);
+    document.addEventListener('click', handleGlobalClick); // 双重保险
 
     return () => {
-      clearInterval(timer);
       document.removeEventListener('mousedown', handleGlobalClick);
       document.removeEventListener('click', handleGlobalClick);
     };
-  }, [contextMenu, editMode]);
+  }, [contextMenu, editMode]); // 仅当这些状态改变时才重新绑定监听
 
   useEffect(() => {
     if (links.length > 0) localStorage.setItem('my-nav-links', JSON.stringify(links));
@@ -301,32 +306,24 @@ export default function App() {
 
   const handleDragStart = (e, index) => {
     dragItem.current = index;
-    // 设置拖拽时的效果
-    // e.dataTransfer.effectAllowed = "move"; 
-    // 可以设置一个透明图片作为ghost，这里使用默认的
   };
 
   const handleDragEnter = (e, index) => {
-    // 当拖拽进入另一个格子的瞬间，交换数据（实现实时排序效果）
-    // 为了避免过于频繁的交换，可以加个简单的判断
     if (dragItem.current === null || dragItem.current === index) return;
     
     const newLinks = [...links];
     const draggedLink = newLinks[dragItem.current];
     
-    // 移除原位置的元素
     newLinks.splice(dragItem.current, 1);
-    // 插入到新位置
     newLinks.splice(index, 0, draggedLink);
     
-    dragItem.current = index; // 更新当前拖拽元素的索引为新位置
+    dragItem.current = index; 
     setLinks(newLinks);
   };
 
   const handleDragEnd = () => {
     dragItem.current = null;
     dragOverItem.current = null;
-    // 触发保存到 localStorage (通过 useEffect [links])
   };
 
   // --- 逻辑处理 ---
@@ -360,8 +357,7 @@ export default function App() {
     e.preventDefault(); 
     e.stopPropagation();
     
-    // 如果已经在编辑模式，右键可能不需要触发菜单，或者触发简化版菜单
-    // 简单起见：如果已在编辑模式，禁止呼出菜单，避免逻辑冲突
+    // 如果已经在编辑模式，禁止呼出菜单，避免逻辑冲突
     if (editMode) return;
 
     let x = e.clientX;
@@ -395,7 +391,6 @@ export default function App() {
     setContextMenu({ ...contextMenu, visible: false });
   };
 
-  // 新增：进入排列/抖动模式
   const handleMenuRearrange = () => {
     setEditMode(true);
     setContextMenu({ ...contextMenu, visible: false });
@@ -435,7 +430,7 @@ export default function App() {
       className="min-h-screen w-full relative flex flex-col items-center font-sans overflow-hidden text-white selection:bg-pink-500 selection:text-white notranslate"
       onClick={() => setContextMenu({ ...contextMenu, visible: false })} 
       onContextMenu={(e) => { e.preventDefault(); setContextMenu({ ...contextMenu, visible: false }); }}
-      data-bg-layer="true" // 用于识别点击背景
+      data-bg-layer="true" 
     >
       <input type="file" ref={iconInputRef} className="hidden" accept="image/*" onChange={handleCustomIconFileChange} />
 
@@ -462,23 +457,23 @@ export default function App() {
           onClick={(e) => e.stopPropagation()} 
           onContextMenu={(e) => e.preventDefault()}
         >
+          {/* 给图标和文字添加 pointer-events-none，确保点击的是 button，避免 contains 判断错误 */}
           <button onClick={handleMenuEdit} className="flex items-center gap-2 px-3 py-2 text-xs text-white/90 hover:bg-white/20 rounded-lg transition-colors text-left w-full">
-            <Edit size={12} /> 编辑
+            <Edit size={12} className="pointer-events-none" /> <span className="pointer-events-none">编辑</span>
           </button>
           <button onClick={handleMenuCustomIcon} className="flex items-center gap-2 px-3 py-2 text-xs text-white/90 hover:bg-white/20 rounded-lg transition-colors text-left w-full">
-            <ImagePlus size={12} /> 自定义图标
+            <ImagePlus size={12} className="pointer-events-none" /> <span className="pointer-events-none">自定义图标</span>
           </button>
           
           <div className="h-[1px] bg-white/10 my-0.5 mx-2"></div>
           
-          {/* 排列图标 (进入抖动/拖拽模式) */}
           <button onClick={handleMenuRearrange} className="flex items-center gap-2 px-3 py-2 text-xs text-white/90 hover:bg-white/20 rounded-lg transition-colors text-left w-full">
-            <Grid size={12} /> 排列图标
+            <Grid size={12} className="pointer-events-none" /> <span className="pointer-events-none">排列图标</span>
           </button>
           
           <div className="h-[1px] bg-white/10 my-0.5 mx-2"></div>
           <button onClick={handleMenuDelete} className="flex items-center gap-2 px-3 py-2 text-xs text-red-400 hover:bg-red-500/20 hover:text-red-300 rounded-lg transition-colors text-left w-full">
-            <Trash2 size={12} /> 删除
+            <Trash2 size={12} className="pointer-events-none" /> <span className="pointer-events-none">删除</span>
           </button>
         </div>
       )}
