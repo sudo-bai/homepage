@@ -2,25 +2,59 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Plus, X, Search, Trash2, ChevronDown, Check, Settings, Globe, 
   Image as ImageIcon, Upload, Monitor, RefreshCw, Edit, 
-  ImagePlus, ArrowLeftRight, Grid 
+  ImagePlus, ArrowLeftRight, Grid, WifiOff 
 } from 'lucide-react';
 
-// 独立的图标组件 - 带本地缓存 + 自定义图标支持
-const SmartIcon = ({ url, title, customIcon }) => {
+// --- 工具函数：图片压缩与转Base64 ---
+const compressAndCacheImage = async (imgUrl, quality = 0.6, maxWidth = 1920) => {
+  try {
+    if (!imgUrl || imgUrl.startsWith('data:')) return null;
+
+    const img = new Image();
+    img.crossOrigin = "Anonymous"; // 尝试跨域加载
+    img.src = imgUrl;
+
+    await new Promise((resolve, reject) => {
+      img.onload = resolve;
+      img.onerror = reject;
+    });
+
+    const canvas = document.createElement('canvas');
+    let width = img.width;
+    let height = img.height;
+
+    // 缩放尺寸以节省存储空间
+    if (width > maxWidth) {
+      height = Math.round((height * maxWidth) / width);
+      width = maxWidth;
+    }
+
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0, width, height);
+
+    // 压缩为 JPEG
+    return canvas.toDataURL('image/jpeg', quality);
+  } catch (e) {
+    // console.warn("Image caching failed (likely CORS restriction):", e);
+    // 缓存失败是预料之中的（跨域问题），不影响主流程
+    return null;
+  }
+};
+
+// --- 组件：智能图标 (增强离线版) ---
+const SmartIcon = ({ url, title, customIcon, isOnline }) => {
   const [src, setSrc] = useState('');
   const [retryCount, setRetryCount] = useState(0);
   const [isCached, setIsCached] = useState(false);
 
   const getHostname = (link) => {
-    try {
-      return new URL(link).hostname;
-    } catch (e) {
-      return '';
-    }
+    try { return new URL(link).hostname; } catch (e) { return ''; }
   };
 
   const hostname = getHostname(url);
-  const cacheKey = `fav_cache_v1_${hostname}`;
+  const cacheKey = `fav_cache_v2_${hostname}`; 
 
   useEffect(() => {
     if (customIcon) {
@@ -28,79 +62,83 @@ const SmartIcon = ({ url, title, customIcon }) => {
       setIsCached(true);
       return;
     }
-
     if (!url || !hostname) return;
-    
+
     try {
       const cachedData = localStorage.getItem(cacheKey);
       if (cachedData) {
         setSrc(cachedData);
         setIsCached(true);
-        return;
+        return; 
       }
     } catch (e) {}
+
+    if (!isOnline) {
+      setSrc('fallback');
+      return;
+    }
 
     setSrc(`https://api.uomg.com/api/get.favicon?url=${encodeURIComponent(url)}`);
     setRetryCount(0);
     setIsCached(false);
-    
-  }, [url, hostname, customIcon]);
+  }, [url, hostname, customIcon, isOnline]);
 
   const handleError = () => {
+    if (!isOnline && isCached) return; 
+
     if (customIcon || isCached) {
-      if (customIcon) {
-         setSrc('fallback'); 
-         return;
-      }
+      if (customIcon) { setSrc('fallback'); return; }
       localStorage.removeItem(cacheKey);
       setIsCached(false);
-      setRetryCount(0);
-      setSrc(`https://api.uomg.com/api/get.favicon?url=${encodeURIComponent(url)}`);
+      
+      if (isOnline) {
+        setRetryCount(0);
+        setSrc(`https://api.uomg.com/api/get.favicon?url=${encodeURIComponent(url)}`);
+      } else {
+        setSrc('fallback');
+      }
       return;
     }
 
-    if (retryCount === 0) {
-      setSrc(`https://api.iowen.cn/favicon/${hostname}.png`);
-      setRetryCount(1);
-    } else if (retryCount === 1) {
-      try {
-        const urlObj = new URL(url);
-        setSrc(`${urlObj.origin}/favicon.ico`);
-      } catch (e) {
+    if (isOnline) {
+      if (retryCount === 0) {
+        setSrc(`https://api.iowen.cn/favicon/${hostname}.png`);
+        setRetryCount(1);
+      } else if (retryCount === 1) {
+        try {
+          const urlObj = new URL(url);
+          setSrc(`${urlObj.origin}/favicon.ico`);
+        } catch (e) {
+          setSrc('fallback');
+        }
+        setRetryCount(2);
+      } else {
         setSrc('fallback');
       }
-      setRetryCount(2);
     } else {
       setSrc('fallback');
     }
   };
 
   const handleLoad = async (e) => {
-    if (customIcon) return;
-    if (isCached || src === 'fallback') return;
-
+    if (customIcon || isCached || src === 'fallback') return;
     const currentSrc = e.target.src;
-
     try {
-      const response = await fetch(currentSrc);
-      const blob = await response.blob();
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        try {
-          const base64 = reader.result;
-          if (base64.length < 50 * 1024) { 
-             localStorage.setItem(cacheKey, base64);
-          } else {
-             localStorage.setItem(cacheKey, currentSrc);
-          }
-        } catch (e) {
-          try { localStorage.setItem(cacheKey, currentSrc); } catch(err) {}
-        }
-      };
-      reader.readAsDataURL(blob);
-    } catch (corsError) {
-      try { localStorage.setItem(cacheKey, currentSrc); } catch(e) {}
-    }
+      if (isOnline) {
+        const response = await fetch(currentSrc);
+        const blob = await response.blob();
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          try {
+            const base64 = reader.result;
+            if (base64.length < 100 * 1024) { 
+               localStorage.setItem(cacheKey, base64);
+            }
+          } catch (e) {}
+        };
+        reader.readAsDataURL(blob);
+      }
+    } catch (corsError) {}
   };
 
   if (src === 'fallback') {
@@ -119,7 +157,7 @@ const SmartIcon = ({ url, title, customIcon }) => {
       onError={handleError}
       onLoad={handleLoad}
       loading="lazy"
-      draggable="false" // 防止图片本身被浏览器默认拖拽
+      draggable="false" 
     />
   );
 };
@@ -127,22 +165,18 @@ const SmartIcon = ({ url, title, customIcon }) => {
 export default function App() {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [links, setLinks] = useState([]);
-  
-  // 弹窗状态
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isCustomModalOpen, setIsCustomModalOpen] = useState(false);
   
-  // 编辑/新增/拖拽 状态
   const [newLink, setNewLink] = useState({ title: '', url: '', customIcon: null });
   const [editingId, setEditingId] = useState(null);
-  
-  // editMode 现在同时控制：显示删除按钮 + 抖动动画 + 启用拖拽
   const [editMode, setEditMode] = useState(false); 
   const dragItem = useRef(null); 
   const dragOverItem = useRef(null); 
 
-  // 搜索相关
   const [searchQuery, setSearchQuery] = useState('');
   const [showDashboard, setShowDashboard] = useState(false); 
   const [searchEngine, setSearchEngine] = useState('baidu');
@@ -150,15 +184,11 @@ export default function App() {
   const [customEngineUrl, setCustomEngineUrl] = useState('');
   const [suggestions, setSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
-  
-  // 动画状态
   const [isAnimating, setIsAnimating] = useState(false);
   
-  // 右键菜单状态
   const [contextMenu, setContextMenu] = useState({ visible: false, x: 0, y: 0, linkId: null });
   const contextMenuRef = useRef(null);
   const iconInputRef = useRef(null);
-
   const searchContainerRef = useRef(null);
   const hasSuggestions = showSuggestions && suggestions.length > 0;
 
@@ -167,6 +197,7 @@ export default function App() {
     customApi: 'https://t.alcy.cc/ycy',
     uploadData: '' 
   });
+  const [activeBgUrl, setActiveBgUrl] = useState(''); 
 
   const engines = {
     baidu: { name: '百度', url: 'https://www.baidu.com/s?wd=', placeholder: '百度一下' },
@@ -181,7 +212,6 @@ export default function App() {
     { id: 2, title: 'GitHub', url: 'https://github.com' },
   ];
 
-  // 初始化设置与时间
   useEffect(() => {
     document.title = "Skadi's home page";
     const link = document.querySelector("link[rel~='icon']") || document.createElement('link');
@@ -190,7 +220,6 @@ export default function App() {
     link.href = 'https://blog.skadi.ltd/wp-content/uploads/2026/01/139527214_p0-scaled.png';
     document.getElementsByTagName('head')[0].appendChild(link);
     document.documentElement.lang = "zh-CN"; 
-    document.documentElement.setAttribute("translate", "no");
     
     const savedLinks = localStorage.getItem('my-nav-links');
     if (savedLinks) setLinks(JSON.parse(savedLinks));
@@ -205,40 +234,123 @@ export default function App() {
     }
 
     const savedBgConfig = localStorage.getItem('bg-config');
-    if (savedBgConfig) setBgConfig(JSON.parse(savedBgConfig));
+    if (savedBgConfig) {
+      setBgConfig(JSON.parse(savedBgConfig));
+    } else {
+      const cachedBg = localStorage.getItem('cached_bg_v1');
+      if (cachedBg) setActiveBgUrl(cachedBg);
+    }
     
-    // 独立的时间定时器，只在组件挂载时启动一次
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
-    return () => clearInterval(timer);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
   }, []);
 
-  // 独立的全局点击监听，处理菜单关闭
+  // --- 修复后的背景加载与缓存逻辑 ---
+  useEffect(() => {
+    const loadBackground = async () => {
+      let targetUrl = '';
+      if (bgConfig.type === 'upload' && bgConfig.uploadData) {
+        targetUrl = bgConfig.uploadData;
+      } else if (bgConfig.type === 'bing') {
+        targetUrl = 'https://bing.biturl.top/?resolution=1920&format=image&index=0&mkt=zh-CN';
+      } else if (bgConfig.type === 'api') {
+        targetUrl = bgConfig.customApi || 'https://t.alcy.cc/ycy';
+      } else {
+        targetUrl = 'https://t.alcy.cc/ycy';
+      }
+
+      // Base64 直接显示
+      if (targetUrl.startsWith('data:')) {
+        setActiveBgUrl(targetUrl);
+        return;
+      }
+
+      // 离线逻辑
+      if (!isOnline) {
+         const cachedBg = localStorage.getItem('cached_bg_v1');
+         if (cachedBg) setActiveBgUrl(cachedBg);
+         // 如果没缓存也没网，也没办法，只能黑屏或者显示默认色
+         return;
+      }
+
+      // 在线逻辑：
+      // 1. 如果有缓存，优先读取缓存（减少白屏）
+      // 2. 如果没有缓存，直接设置 URL（确保一定能看到图，这是修复的关键）
+      const cachedBg = localStorage.getItem('cached_bg_v1');
+      
+      // 这里的逻辑改为：不管有没有缓存，先确保 UI 有东西显示。
+      // 如果有缓存用缓存，没缓存用在线 URL。
+      // 然后再尝试去请求“新图”来刷新缓存。
+      if (cachedBg) {
+        setActiveBgUrl(cachedBg);
+      } else {
+        // 关键修复：没缓存时，直接用 URL，不走 Image 对象加载，避免 CORS 失败导致不显示
+        setActiveBgUrl(targetUrl); 
+      }
+
+      // 3. 后台尝试缓存：尝试使用 CORS 加载图片
+      // 如果服务器支持 CORS，我们就能把它存到 localStorage，下次离线就能用了。
+      // 如果服务器不支持 CORS，这里会报错，但不会影响上面已经设置好的背景显示。
+      const img = new Image();
+      img.crossOrigin = "Anonymous"; 
+      img.src = targetUrl;
+
+      img.onload = async () => {
+        // 只有支持跨域的图片才能走到这里
+        // 更新 UI 显示这个“合法”的新图（可选，为了让用户看到最新鲜的图）
+        // setActiveBgUrl(targetUrl); // 如果你希望每次都刷新，可以取消注释这行
+        
+        try {
+           const base64 = await compressAndCacheImage(targetUrl);
+           if (base64) {
+             localStorage.setItem('cached_bg_v1', base64);
+           }
+        } catch(e) { }
+      };
+
+      img.onerror = () => {
+        // 跨域失败或网络错误
+        // 确保最终回退到直接使用 URL (如果是之前展示的是旧缓存，这里可以选择是否要强制刷新为新 URL)
+        // 这里为了保险，如果当前没图，强制设为 targetUrl
+        if (!cachedBg) {
+            setActiveBgUrl(targetUrl);
+        }
+        // console.log("Background caching skipped due to CORS or network error");
+      };
+    };
+
+    loadBackground();
+  }, [bgConfig, isOnline]);
+
+
   useEffect(() => {
     const handleGlobalClick = (event) => {
-      // 处理搜索建议关闭
       if (searchContainerRef.current && !searchContainerRef.current.contains(event.target)) {
         setShowSuggestions(false);
       }
-      
-      // 处理右键菜单关闭
       if (contextMenu.visible && contextMenuRef.current && !contextMenuRef.current.contains(event.target)) {
         setContextMenu({ ...contextMenu, visible: false });
       }
-
-      // 处理编辑模式退出 (点击背景层)
       if (editMode && event.target.getAttribute('data-bg-layer') === 'true') {
         setEditMode(false);
       }
     };
-    
     document.addEventListener('mousedown', handleGlobalClick);
-    document.addEventListener('click', handleGlobalClick); // 双重保险
-
+    document.addEventListener('click', handleGlobalClick);
     return () => {
       document.removeEventListener('mousedown', handleGlobalClick);
       document.removeEventListener('click', handleGlobalClick);
     };
-  }, [contextMenu, editMode]); // 仅当这些状态改变时才重新绑定监听
+  }, [contextMenu, editMode]);
 
   useEffect(() => {
     if (links.length > 0) localStorage.setItem('my-nav-links', JSON.stringify(links));
@@ -248,12 +360,12 @@ export default function App() {
     try {
       localStorage.setItem('bg-config', JSON.stringify(bgConfig));
     } catch (e) {
-      alert("图片太大了，无法保存到本地缓存！");
+      alert("配置数据过大，无法保存！请尝试更小的图片。");
     }
   }, [bgConfig]);
 
-  // 搜索预测
   useEffect(() => {
+    if (!isOnline) { setSuggestions([]); return; }
     let script;
     const fetchSuggestions = () => {
       if (!searchQuery.trim()) {
@@ -280,9 +392,8 @@ export default function App() {
     };
     const timeoutId = setTimeout(() => fetchSuggestions(), 300);
     return () => clearTimeout(timeoutId);
-  }, [searchQuery]);
+  }, [searchQuery, isOnline]);
 
-  // 控制仪表盘动画
   useEffect(() => {
     if (showDashboard) {
       setIsAnimating(true);
@@ -290,44 +401,21 @@ export default function App() {
       return () => clearTimeout(timer);
     } else {
       setIsAnimating(false);
-      setEditMode(false); // 收起时自动退出编辑模式
+      setEditMode(false);
     }
   }, [showDashboard]);
 
-  const getBackgroundUrl = () => {
-    switch (bgConfig.type) {
-      case 'bing': return 'https://bing.biturl.top/?resolution=1920&format=image&index=0&mkt=zh-CN';
-      case 'api': return bgConfig.customApi || 'https://t.alcy.cc/ycy';
-      case 'upload': return bgConfig.uploadData;
-      default: return 'https://t.alcy.cc/ycy';
-    }
-  };
-
-  // --- 拖拽逻辑 ---
-
-  const handleDragStart = (e, index) => {
-    dragItem.current = index;
-  };
-
+  const handleDragStart = (e, index) => { dragItem.current = index; };
   const handleDragEnter = (e, index) => {
     if (dragItem.current === null || dragItem.current === index) return;
-    
     const newLinks = [...links];
     const draggedLink = newLinks[dragItem.current];
-    
     newLinks.splice(dragItem.current, 1);
     newLinks.splice(index, 0, draggedLink);
-    
     dragItem.current = index; 
     setLinks(newLinks);
   };
-
-  const handleDragEnd = () => {
-    dragItem.current = null;
-    dragOverItem.current = null;
-  };
-
-  // --- 逻辑处理 ---
+  const handleDragEnd = () => { dragItem.current = null; dragOverItem.current = null; };
 
   const handleSaveLink = () => {
     if (!newLink.title || !newLink.url) return;
@@ -342,7 +430,6 @@ export default function App() {
       const newItem = { id: Date.now(), title: newLink.title, url: formattedUrl, customIcon: null };
       setLinks([...links, newItem]);
     }
-    
     setIsModalOpen(false);
     setNewLink({ title: '', url: '', customIcon: null });
     setEditingId(null);
@@ -357,24 +444,14 @@ export default function App() {
   const handleContextMenu = (e, linkId) => {
     e.preventDefault(); 
     e.stopPropagation();
-    
-    // 如果已经在编辑模式，禁止呼出菜单，避免逻辑冲突
     if (editMode) return;
-
     let x = e.clientX;
     let y = e.clientY;
     const menuWidth = 160;
     const menuHeight = 200;
-
     if (x + menuWidth > window.innerWidth) x = window.innerWidth - menuWidth - 10;
     if (y + menuHeight > window.innerHeight) y = window.innerHeight - menuHeight - 10;
-
-    setContextMenu({
-      visible: true,
-      x,
-      y,
-      linkId
-    });
+    setContextMenu({ visible: true, x, y, linkId });
   };
 
   const handleMenuEdit = () => {
@@ -422,7 +499,6 @@ export default function App() {
     setContextMenu({ ...contextMenu, visible: false });
   };
 
-
   const formatTime = (date) => date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false });
   const formatDate = (date) => date.toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' });
 
@@ -435,10 +511,12 @@ export default function App() {
     >
       <input type="file" ref={iconInputRef} className="hidden" accept="image/*" onChange={handleCustomIconFileChange} />
 
+      {/* 背景层 */}
       <div 
         className="absolute inset-0 z-0 bg-cover bg-center transition-all duration-700 ease-in-out"
         style={{ 
-          backgroundImage: `url("${getBackgroundUrl()}")`,
+          backgroundImage: activeBgUrl ? `url("${activeBgUrl}")` : 'none',
+          backgroundColor: '#333', 
           filter: showDashboard ? 'brightness(0.6) blur(10px)' : 'brightness(0.85) blur(0px)',
           transform: showDashboard ? 'scale(1.1)' : 'scale(1.05)'
         }}
@@ -447,6 +525,14 @@ export default function App() {
       
       {showDashboard && (
         <div className="absolute inset-0 z-10" onClick={() => setShowDashboard(false)} data-bg-layer="true"></div>
+      )}
+
+      {/* 离线状态指示器 */}
+      {!isOnline && (
+        <div className="absolute top-4 right-4 z-50 flex items-center gap-2 px-3 py-1.5 bg-red-500/20 backdrop-blur-md border border-red-500/30 rounded-full text-red-200 text-xs animate-fade-in-down">
+          <WifiOff size={12} />
+          <span>离线模式 - 使用本地缓存</span>
+        </div>
       )}
 
       {/* 右键菜单 */}
@@ -458,20 +544,16 @@ export default function App() {
           onClick={(e) => e.stopPropagation()} 
           onContextMenu={(e) => e.preventDefault()}
         >
-          {/* 给图标和文字添加 pointer-events-none，确保点击的是 button，避免 contains 判断错误 */}
           <button onClick={handleMenuEdit} className="flex items-center gap-2 px-3 py-2 text-xs text-white/90 hover:bg-white/20 rounded-lg transition-colors text-left w-full">
             <Edit size={12} className="pointer-events-none" /> <span className="pointer-events-none">编辑</span>
           </button>
           <button onClick={handleMenuCustomIcon} className="flex items-center gap-2 px-3 py-2 text-xs text-white/90 hover:bg-white/20 rounded-lg transition-colors text-left w-full">
             <ImagePlus size={12} className="pointer-events-none" /> <span className="pointer-events-none">自定义图标</span>
           </button>
-          
           <div className="h-[1px] bg-white/10 my-0.5 mx-2"></div>
-          
           <button onClick={handleMenuRearrange} className="flex items-center gap-2 px-3 py-2 text-xs text-white/90 hover:bg-white/20 rounded-lg transition-colors text-left w-full">
             <Grid size={12} className="pointer-events-none" /> <span className="pointer-events-none">排列图标</span>
           </button>
-          
           <div className="h-[1px] bg-white/10 my-0.5 mx-2"></div>
           <button onClick={handleMenuDelete} className="flex items-center gap-2 px-3 py-2 text-xs text-red-400 hover:bg-red-500/20 hover:text-red-300 rounded-lg transition-colors text-left w-full">
             <Trash2 size={12} className="pointer-events-none" /> <span className="pointer-events-none">删除</span>
@@ -498,7 +580,7 @@ export default function App() {
 
         {/* 搜索框 */}
         <div ref={searchContainerRef} className="w-full max-w-md relative z-30 transition-all duration-500 group">
-          <form onSubmit={(e) => { e.preventDefault(); if(searchQuery.trim()) window.location.href = `${engines[searchEngine].url}${encodeURIComponent(searchQuery)}`; }} className="relative w-full flex items-center z-50">
+          <form onSubmit={(e) => { e.preventDefault(); if(searchQuery.trim() && isOnline) window.location.href = `${engines[searchEngine].url}${encodeURIComponent(searchQuery)}`; }} className="relative w-full flex items-center z-50">
             <div className="absolute left-1.5 top-1.5 bottom-1.5 z-50 flex items-center rounded-full">
                 <button
                 type="button"
@@ -527,16 +609,17 @@ export default function App() {
             <input
               type="text"
               value={searchQuery}
-              onChange={(e) => { setSearchQuery(e.target.value); if (e.target.value.trim()) setShowSuggestions(true); }}
+              onChange={(e) => { setSearchQuery(e.target.value); if (e.target.value.trim() && isOnline) setShowSuggestions(true); }}
               onFocus={() => { setShowDashboard(true); if (suggestions.length > 0) setShowSuggestions(true); }}
               onClick={() => setShowDashboard(true)}
-              placeholder={engines[searchEngine].placeholder}
-              className={`w-full py-3.5 pl-32 pr-12 backdrop-blur-md text-white placeholder-white/30 shadow-lg focus:outline-none transition-all duration-300 text-sm ${hasSuggestions ? 'bg-black/40 border border-white/20 border-b-0 rounded-t-3xl rounded-b-none focus:shadow-none' : 'bg-black/20 border border-white/10 rounded-full focus:bg-black/40 focus:border-white/30 focus:shadow-2xl'}`}
+              placeholder={isOnline ? engines[searchEngine].placeholder : "离线模式"}
+              disabled={!isOnline}
+              className={`w-full py-3.5 pl-32 pr-12 backdrop-blur-md text-white placeholder-white/30 shadow-lg focus:outline-none transition-all duration-300 text-sm ${hasSuggestions ? 'bg-black/40 border border-white/20 border-b-0 rounded-t-3xl rounded-b-none focus:shadow-none' : 'bg-black/20 border border-white/10 rounded-full focus:bg-black/40 focus:border-white/30 focus:shadow-2xl'} ${!isOnline ? 'opacity-50 cursor-not-allowed' : ''}`}
               style={{ textAlign: 'center' }} 
             />
-            <button type="submit" className="absolute right-3.5 p-1.5 text-white/40 hover:text-white transition-colors bg-white/5 rounded-full hover:bg-white/10 focus:outline-none"><Search size={16} /></button>
+            <button type="submit" disabled={!isOnline} className="absolute right-3.5 p-1.5 text-white/40 hover:text-white transition-colors bg-white/5 rounded-full hover:bg-white/10 focus:outline-none"><Search size={16} /></button>
           </form>
-          {hasSuggestions && (
+          {hasSuggestions && isOnline && (
             <div className="absolute top-full left-0 w-full bg-black/40 backdrop-blur-md border border-t-0 border-white/20 rounded-b-3xl shadow-xl overflow-hidden z-40 origin-top" style={{ clipPath: 'inset(0px -50px -50px -50px)' }}>
               {suggestions.map((suggestion, index) => (
                 <div key={index} onClick={() => { setSearchQuery(suggestion); setShowSuggestions(false); window.location.href = `${engines[searchEngine].url}${encodeURIComponent(suggestion)}`; }} className="px-4 py-2.5 text-sm text-white/80 hover:bg-white/10 hover:text-white cursor-pointer transition-colors flex items-center gap-3">
@@ -576,7 +659,7 @@ export default function App() {
                 draggable={editMode}
                 onDragStart={(e) => handleDragStart(e, index)}
                 onDragEnter={(e) => handleDragEnter(e, index)}
-                onDragOver={(e) => e.preventDefault()} // 允许 drop
+                onDragOver={(e) => e.preventDefault()}
                 onDragEnd={handleDragEnd}
                 className={`group relative flex flex-col items-center justify-center p-2 rounded-xl bg-white/5 border border-white/5 backdrop-blur-md shadow-sm transition-all duration-300 h-24 select-none
                   ${isAnimating ? 'animate-bounce-enter' : ''}
@@ -586,13 +669,13 @@ export default function App() {
                 onContextMenu={(e) => handleContextMenu(e, link.id)} 
               >
                 <div className="w-9 h-9 mb-2 rounded-lg overflow-hidden bg-white/5 flex items-center justify-center shadow-inner group-hover:bg-white/10 transition-colors pointer-events-none">
-                  <SmartIcon url={link.url} title={link.title} customIcon={link.customIcon} />
+                  {/* 将在线状态传入 SmartIcon */}
+                  <SmartIcon url={link.url} title={link.title} customIcon={link.customIcon} isOnline={isOnline} />
                 </div>
                 <span className="text-white/80 group-hover:text-white font-medium text-[10px] truncate w-full text-center px-1 transition-colors pointer-events-none">
                   {link.title}
                 </span>
                 
-                {/* 删除按钮 - 仅在编辑模式显示 */}
                 {editMode && (
                   <button
                     onClick={(e) => {
@@ -743,7 +826,6 @@ export default function App() {
         }
         .animate-bounce-enter { animation: bounce-enter 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) backwards; }
         
-        /* 抖动动画 */
         @keyframes shake {
           0% { transform: rotate(0deg); }
           25% { transform: rotate(1.5deg); }
@@ -751,20 +833,20 @@ export default function App() {
           75% { transform: rotate(-1.5deg); }
           100% { transform: rotate(0deg); }
         }
-        .animate-shake {
-          animation: shake 0.25s infinite ease-in-out;
-        }
+        .animate-shake { animation: shake 0.25s infinite ease-in-out; }
 
         @keyframes fade-in-down {
           from { opacity: 0; transform: translateY(-10px); }
           to { opacity: 1; transform: translateY(0); }
         }
         .animate-fade-in-down { animation: fade-in-down 0.2s ease-out forwards; }
+        
         @keyframes fade-in-fast {
           from { opacity: 0; transform: scale(0.9); }
           to { opacity: 1; transform: scale(1); }
         }
         .animate-fade-in-fast { animation: fade-in-fast 0.1s ease-out forwards; }
+        
         @keyframes bounce-in {
           0% { transform: scale(0.8); opacity: 0; }
           100% { transform: scale(1); opacity: 1; }
