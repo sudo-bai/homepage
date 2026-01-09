@@ -500,12 +500,12 @@ export default function App() {
         <div ref={searchContainerRef} className="w-full max-w-md relative z-30 transition-all duration-500 group">
           <form onSubmit={(e) => { e.preventDefault(); if(searchQuery.trim()) window.location.href = `${engines[searchEngine].url}${encodeURIComponent(searchQuery)}`; }} className="relative w-full flex items-center z-50">
             <div className="absolute left-1.5 top-1.5 bottom-1.5 z-50 flex items-center rounded-full">
-              <button
+                <button
                 type="button"
                 onClick={() => setIsEngineMenuOpen(!isEngineMenuOpen)}
                 className="h-full flex items-center gap-1.5 px-3.5 text-xs font-medium text-white/90 bg-white/10 hover:bg-white/20 hover:text-white rounded-full transition-all border border-white/10 shadow-sm active:scale-95 focus:outline-none focus:ring-0 relative z-50"
               >
-                <span className="truncate max-w-[4rem] text-center">{engines[searchEngine].name}</span>
+                <span title={engines[searchEngine].name} className="truncate max-w-[6rem] md:max-w-[8rem] text-center whitespace-nowrap">{engines[searchEngine].name}</span>
                 <ChevronDown size={12} className={`opacity-60 transition-transform duration-200 ${isEngineMenuOpen ? 'rotate-180' : ''}`}/>
               </button>
               {isEngineMenuOpen && (
