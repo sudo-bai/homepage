@@ -187,7 +187,7 @@ export default function App() {
     const link = document.querySelector("link[rel~='icon']") || document.createElement('link');
     link.type = 'image/png';
     link.rel = 'icon';
-    link.href = 'https://blog.skadi.ltd/wp-content/uploads/2025/12/Gemini_Generated_Image_c428t9c428t9c428.png';
+    link.href = 'https://blog.skadi.ltd/wp-content/uploads/2026/01/139527214_p0-scaled.png';
     document.getElementsByTagName('head')[0].appendChild(link);
     document.documentElement.lang = "zh-CN"; 
     document.documentElement.setAttribute("translate", "no");
@@ -509,7 +509,7 @@ export default function App() {
                 <ChevronDown size={12} className={`opacity-60 transition-transform duration-200 ${isEngineMenuOpen ? 'rotate-180' : ''}`}/>
               </button>
               {isEngineMenuOpen && (
-                <div className="absolute top-full left-0 mt-2 w-32 p-1 bg-black/20 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl animate-fade-in-down origin-top-left flex flex-col z-40">
+                <div className="absolute top-full left-0 mt-2 w-32 p-1 bg-black/20 backdrop-blur-xl border border-white/10 rounded-xl overflow-hidden shadow-2xl animate-fade-in-down origin-top-left flex flex-col z-40">
                   {Object.entries(engines).map(([key, engine]) => (
                     <button key={key} type="button" onClick={() => { setSearchEngine(key); localStorage.setItem('search-engine-pref', key); setIsEngineMenuOpen(false); }} className="w-full px-3 py-2 text-left text-xs text-white/80 hover:bg-white/15 hover:text-white flex items-center justify-between transition-colors focus:outline-none rounded-lg mb-0.5">
                       <span className="truncate">{engine.name}</span>
