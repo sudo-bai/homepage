@@ -172,6 +172,7 @@ export default function App() {
     baidu: { name: '百度', url: 'https://www.baidu.com/s?wd=', placeholder: '百度一下' },
     google: { name: 'Google', url: 'https://www.google.com/search?q=', placeholder: 'Google 搜索' },
     bing: { name: 'Bing', url: 'https://www.bing.com/search?q=', placeholder: '微软 Bing' },
+    duckduckgo: { name: 'DuckDuckGo', url: 'https://duckduckgo.com/?q=', placeholder: 'DuckDuckGo搜索' },
     custom: { name: '自定义', url: customEngineUrl, placeholder: '自定义搜索' },
   };
 
