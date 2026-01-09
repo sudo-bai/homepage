@@ -2,10 +2,10 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Plus, X, Search, Trash2, ChevronDown, Check, Settings, Globe, 
   Image as ImageIcon, Upload, Monitor, RefreshCw, Edit, 
-  ImagePlus, ArrowLeftRight, Grid, WifiOff 
+  ImagePlus, ArrowLeftRight, Grid, WifiOff, Download 
 } from 'lucide-react';
 
-// --- 工具函数：图片压缩与转Base64 ---
+// --- 工具函数：图片压缩与转Base64 (保持不变) ---
 const compressAndCacheImage = async (imgUrl, quality = 0.6, maxWidth = 1920) => {
   try {
     if (!imgUrl || imgUrl.startsWith('data:')) return null;
@@ -37,13 +37,11 @@ const compressAndCacheImage = async (imgUrl, quality = 0.6, maxWidth = 1920) => 
     // 压缩为 JPEG
     return canvas.toDataURL('image/jpeg', quality);
   } catch (e) {
-    // console.warn("Image caching failed (likely CORS restriction):", e);
-    // 缓存失败是预料之中的（跨域问题），不影响主流程
     return null;
   }
 };
 
-// --- 组件：智能图标 (增强离线版) ---
+// --- 组件：智能图标 (保持不变) ---
 const SmartIcon = ({ url, title, customIcon, isOnline }) => {
   const [src, setSrc] = useState('');
   const [retryCount, setRetryCount] = useState(0);
@@ -212,6 +210,74 @@ export default function App() {
     { id: 2, title: 'GitHub', url: 'https://github.com' },
   ];
 
+  // --- 导出配置 ---
+  const handleExportConfig = () => {
+    const config = {
+      version: 1,
+      timestamp: new Date().toISOString(),
+      links: links,
+      bgConfig: bgConfig,
+      searchEngine: searchEngine,
+      customEngineUrl: customEngineUrl
+    };
+    
+    const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `skadi_home_backup_${new Date().toISOString().slice(0,10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  // --- 导入配置 ---
+  const handleImportConfig = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const config = JSON.parse(event.target.result);
+        
+        // 简单的数据校验
+        if (config.links && Array.isArray(config.links)) {
+          setLinks(config.links);
+          // 立即持久化，防止刷新丢失
+          localStorage.setItem('my-nav-links', JSON.stringify(config.links));
+        }
+        
+        if (config.bgConfig) {
+          setBgConfig(config.bgConfig);
+          // 立即持久化
+          localStorage.setItem('bg-config', JSON.stringify(config.bgConfig));
+        }
+
+        if (config.searchEngine) {
+          setSearchEngine(config.searchEngine);
+          localStorage.setItem('search-engine-pref', config.searchEngine);
+        }
+
+        if (config.customEngineUrl) {
+          setCustomEngineUrl(config.customEngineUrl);
+          localStorage.setItem('custom-engine-url', config.customEngineUrl);
+        }
+
+        alert(`配置导入成功！\n备份时间: ${config.timestamp ? new Date(config.timestamp).toLocaleString() : '未知'}`);
+        setIsSettingsOpen(false);
+      } catch (err) {
+        alert('导入失败：文件格式错误或已损坏');
+        console.error(err);
+      }
+    };
+    reader.readAsText(file);
+    // 清空 input 使得同一个文件可以再次触发 change
+    e.target.value = '';
+  };
+
+
   useEffect(() => {
     document.title = "Skadi's home page";
     const link = document.querySelector("link[rel~='icon']") || document.createElement('link');
@@ -254,7 +320,6 @@ export default function App() {
     };
   }, []);
 
-  // --- 修复后的背景加载与缓存逻辑 ---
   useEffect(() => {
     const loadBackground = async () => {
       let targetUrl = '';
@@ -268,47 +333,29 @@ export default function App() {
         targetUrl = 'https://t.alcy.cc/ycy';
       }
 
-      // Base64 直接显示
       if (targetUrl.startsWith('data:')) {
         setActiveBgUrl(targetUrl);
         return;
       }
 
-      // 离线逻辑
       if (!isOnline) {
          const cachedBg = localStorage.getItem('cached_bg_v1');
          if (cachedBg) setActiveBgUrl(cachedBg);
-         // 如果没缓存也没网，也没办法，只能黑屏或者显示默认色
          return;
       }
 
-      // 在线逻辑：
-      // 1. 如果有缓存，优先读取缓存（减少白屏）
-      // 2. 如果没有缓存，直接设置 URL（确保一定能看到图，这是修复的关键）
       const cachedBg = localStorage.getItem('cached_bg_v1');
-      
-      // 这里的逻辑改为：不管有没有缓存，先确保 UI 有东西显示。
-      // 如果有缓存用缓存，没缓存用在线 URL。
-      // 然后再尝试去请求“新图”来刷新缓存。
       if (cachedBg) {
         setActiveBgUrl(cachedBg);
       } else {
-        // 关键修复：没缓存时，直接用 URL，不走 Image 对象加载，避免 CORS 失败导致不显示
         setActiveBgUrl(targetUrl); 
       }
 
-      // 3. 后台尝试缓存：尝试使用 CORS 加载图片
-      // 如果服务器支持 CORS，我们就能把它存到 localStorage，下次离线就能用了。
-      // 如果服务器不支持 CORS，这里会报错，但不会影响上面已经设置好的背景显示。
       const img = new Image();
       img.crossOrigin = "Anonymous"; 
       img.src = targetUrl;
 
       img.onload = async () => {
-        // 只有支持跨域的图片才能走到这里
-        // 更新 UI 显示这个“合法”的新图（可选，为了让用户看到最新鲜的图）
-        // setActiveBgUrl(targetUrl); // 如果你希望每次都刷新，可以取消注释这行
-        
         try {
            const base64 = await compressAndCacheImage(targetUrl);
            if (base64) {
@@ -318,13 +365,9 @@ export default function App() {
       };
 
       img.onerror = () => {
-        // 跨域失败或网络错误
-        // 确保最终回退到直接使用 URL (如果是之前展示的是旧缓存，这里可以选择是否要强制刷新为新 URL)
-        // 这里为了保险，如果当前没图，强制设为 targetUrl
         if (!cachedBg) {
             setActiveBgUrl(targetUrl);
         }
-        // console.log("Background caching skipped due to CORS or network error");
       };
     };
 
@@ -638,7 +681,7 @@ export default function App() {
           <div className="flex justify-between items-center mb-3 px-2">
             <h2 className="text-white/50 text-[10px] font-medium tracking-wider uppercase">快捷导航</h2>
             <div className="flex items-center gap-2">
-              <button onClick={() => setIsSettingsOpen(true)} className="p-1.5 rounded-full text-white/40 hover:text-white hover:bg-white/10 transition-colors" title="背景设置">
+              <button onClick={() => setIsSettingsOpen(true)} className="p-1.5 rounded-full text-white/40 hover:text-white hover:bg-white/10 transition-colors" title="通用设置">
                 <Settings size={14} />
               </button>
               <button 
@@ -757,61 +800,92 @@ export default function App() {
         </div>
       )}
 
-      {/* 背景设置弹窗 */}
+      {/* 设置弹窗 (包含背景与数据备份) */}
       {isSettingsOpen && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setIsSettingsOpen(false)}></div>
           <div className="relative w-full max-w-sm bg-black/40 backdrop-blur-2xl border border-white/20 rounded-2xl p-6 shadow-2xl animate-bounce-in">
             <div className="flex justify-between items-center mb-6">
               <h3 className="text-lg font-semibold text-white flex items-center gap-2">
-                <ImageIcon size={18} /> 背景设置
+                <Settings size={18} /> 设置
               </h3>
               <button onClick={() => setIsSettingsOpen(false)} className="text-white/50 hover:text-white"><X size={20} /></button>
             </div>
-            <div className="space-y-3">
-              <button onClick={() => setBgConfig({ ...bgConfig, type: 'default' })} className={`w-full p-3 rounded-xl border flex items-center gap-3 transition-all ${bgConfig.type === 'default' ? 'bg-white/10 border-white/50' : 'bg-transparent border-white/10 hover:bg-white/5'}`}>
-                <div className="w-8 h-8 rounded-lg bg-pink-500/20 flex items-center justify-center text-pink-400"><Monitor size={16}/></div>
-                <div className="text-left flex-1"><div className="text-sm font-medium text-white">默认背景</div></div>
-                {bgConfig.type === 'default' && <Check size={16} className="text-green-400"/>}
-              </button>
-              <button onClick={() => setBgConfig({ ...bgConfig, type: 'bing' })} className={`w-full p-3 rounded-xl border flex items-center gap-3 transition-all ${bgConfig.type === 'bing' ? 'bg-white/10 border-white/50' : 'bg-transparent border-white/10 hover:bg-white/5'}`}>
-                <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center text-blue-400"><Globe size={16}/></div>
-                <div className="text-left flex-1"><div className="text-sm font-medium text-white">Bing 每日一图</div></div>
-                {bgConfig.type === 'bing' && <Check size={16} className="text-green-400"/>}
-              </button>
-              <div className={`rounded-xl border transition-all overflow-hidden ${bgConfig.type === 'api' ? 'bg-white/10 border-white/50' : 'bg-transparent border-white/10'}`}>
-                <button onClick={() => setBgConfig({ ...bgConfig, type: 'api' })} className="w-full p-3 flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center text-purple-400"><RefreshCw size={16}/></div>
-                  <div className="text-left flex-1"><div className="text-sm font-medium text-white">自定义图片 API</div></div>
-                  {bgConfig.type === 'api' && <Check size={16} className="text-green-400"/>}
-                </button>
-                {bgConfig.type === 'api' && <div className="px-3 pb-3"><input type="text" value={bgConfig.customApi} onChange={(e) => setBgConfig({ ...bgConfig, customApi: e.target.value })} placeholder="输入图片 API 地址..." className="w-full bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-white/30" /></div>}
-              </div>
-              <div className={`rounded-xl border transition-all overflow-hidden ${bgConfig.type === 'upload' ? 'bg-white/10 border-white/50' : 'bg-transparent border-white/10'}`}>
-                <button onClick={() => setBgConfig({ ...bgConfig, type: 'upload' })} className="w-full p-3 flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-orange-500/20 flex items-center justify-center text-orange-400"><Upload size={16}/></div>
-                  <div className="text-left flex-1"><div className="text-sm font-medium text-white">本地上传</div></div>
-                  {bgConfig.type === 'upload' && <Check size={16} className="text-green-400"/>}
-                </button>
-                {bgConfig.type === 'upload' && (
-                  <div className="px-3 pb-3">
-                    <label className="flex flex-col items-center justify-center w-full h-24 border border-dashed border-white/20 rounded-lg cursor-pointer hover:bg-white/5 transition-colors">
-                      <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                        <p className="text-xs text-white/50">点击选择图片 (Max 4MB)</p>
-                      </div>
-                      <input type="file" accept="image/*" className="hidden" 
-                        onChange={(e) => {
-                           const file = e.target.files[0];
-                           if (!file) return;
-                           const reader = new FileReader();
-                           reader.onloadend = () => setBgConfig(prev => ({ ...prev, type: 'upload', uploadData: reader.result }));
-                           reader.readAsDataURL(file);
-                        }} 
-                      />
-                    </label>
+            
+            <div className="space-y-6">
+              {/* 背景设置部分 */}
+              <div>
+                <h4 className="text-xs font-bold text-white/40 uppercase tracking-wider mb-3 ml-1">背景风格</h4>
+                <div className="space-y-2">
+                  <button onClick={() => setBgConfig({ ...bgConfig, type: 'default' })} className={`w-full p-2.5 rounded-xl border flex items-center gap-3 transition-all ${bgConfig.type === 'default' ? 'bg-white/10 border-white/50' : 'bg-transparent border-white/10 hover:bg-white/5'}`}>
+                    <div className="w-8 h-8 rounded-lg bg-pink-500/20 flex items-center justify-center text-pink-400"><Monitor size={16}/></div>
+                    <div className="text-left flex-1"><div className="text-sm font-medium text-white">默认背景</div></div>
+                    {bgConfig.type === 'default' && <Check size={16} className="text-green-400"/>}
+                  </button>
+                  <button onClick={() => setBgConfig({ ...bgConfig, type: 'bing' })} className={`w-full p-2.5 rounded-xl border flex items-center gap-3 transition-all ${bgConfig.type === 'bing' ? 'bg-white/10 border-white/50' : 'bg-transparent border-white/10 hover:bg-white/5'}`}>
+                    <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center text-blue-400"><Globe size={16}/></div>
+                    <div className="text-left flex-1"><div className="text-sm font-medium text-white">Bing 每日一图</div></div>
+                    {bgConfig.type === 'bing' && <Check size={16} className="text-green-400"/>}
+                  </button>
+                  <div className={`rounded-xl border transition-all overflow-hidden ${bgConfig.type === 'api' ? 'bg-white/10 border-white/50' : 'bg-transparent border-white/10'}`}>
+                    <button onClick={() => setBgConfig({ ...bgConfig, type: 'api' })} className="w-full p-2.5 flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center text-purple-400"><RefreshCw size={16}/></div>
+                      <div className="text-left flex-1"><div className="text-sm font-medium text-white">自定义图片 API</div></div>
+                      {bgConfig.type === 'api' && <Check size={16} className="text-green-400"/>}
+                    </button>
+                    {bgConfig.type === 'api' && <div className="px-3 pb-3"><input type="text" value={bgConfig.customApi} onChange={(e) => setBgConfig({ ...bgConfig, customApi: e.target.value })} placeholder="输入图片 API 地址..." className="w-full bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-white/30" /></div>}
                   </div>
-                )}
+                  <div className={`rounded-xl border transition-all overflow-hidden ${bgConfig.type === 'upload' ? 'bg-white/10 border-white/50' : 'bg-transparent border-white/10'}`}>
+                    <button onClick={() => setBgConfig({ ...bgConfig, type: 'upload' })} className="w-full p-2.5 flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-lg bg-orange-500/20 flex items-center justify-center text-orange-400"><Upload size={16}/></div>
+                      <div className="text-left flex-1"><div className="text-sm font-medium text-white">本地上传</div></div>
+                      {bgConfig.type === 'upload' && <Check size={16} className="text-green-400"/>}
+                    </button>
+                    {bgConfig.type === 'upload' && (
+                      <div className="px-3 pb-3">
+                        <label className="flex flex-col items-center justify-center w-full h-20 border border-dashed border-white/20 rounded-lg cursor-pointer hover:bg-white/5 transition-colors">
+                          <div className="flex flex-col items-center justify-center">
+                            <p className="text-xs text-white/50">点击选择图片 (Max 4MB)</p>
+                          </div>
+                          <input type="file" accept="image/*" className="hidden" 
+                            onChange={(e) => {
+                               const file = e.target.files[0];
+                               if (!file) return;
+                               const reader = new FileReader();
+                               reader.onloadend = () => setBgConfig(prev => ({ ...prev, type: 'upload', uploadData: reader.result }));
+                               reader.readAsDataURL(file);
+                            }} 
+                          />
+                        </label>
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
+
+              {/* 数据备份部分 */}
+              <div>
+                <h4 className="text-xs font-bold text-white/40 uppercase tracking-wider mb-3 ml-1">数据管理</h4>
+                <div className="grid grid-cols-2 gap-3">
+                   <button 
+                    onClick={handleExportConfig}
+                    className="flex flex-col items-center justify-center gap-2 p-3 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/30 transition-all text-white/80 hover:text-white"
+                   >
+                     <Download size={18} className="text-blue-400" />
+                     <span className="text-xs font-medium">导出备份</span>
+                   </button>
+                   
+                   <label className="flex flex-col items-center justify-center gap-2 p-3 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/30 transition-all text-white/80 hover:text-white cursor-pointer">
+                     <Upload size={18} className="text-green-400" />
+                     <span className="text-xs font-medium">恢复备份</span>
+                     <input type="file" accept=".json" onChange={handleImportConfig} className="hidden" />
+                   </label>
+                </div>
+                <p className="text-[10px] text-white/30 mt-2 text-center">
+                  将会导出所有配置，包括背景图和自定义图标。
+                </p>
+              </div>
+
             </div>
           </div>
         </div>
