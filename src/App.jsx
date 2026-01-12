@@ -302,10 +302,9 @@ export default function App() {
     const savedBgConfig = localStorage.getItem('bg-config');
     if (savedBgConfig) {
       setBgConfig(JSON.parse(savedBgConfig));
-    } else {
-      const cachedBg = localStorage.getItem('cached_bg_v1');
-      if (cachedBg) setActiveBgUrl(cachedBg);
     }
+    // 注意：初始加载背景的逻辑现在完全移交给了下面的 useEffect(loadBackground) 处理，
+    // 这里不再读取旧的 'cached_bg_v1'，避免污染。
     
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
@@ -320,10 +319,12 @@ export default function App() {
     };
   }, []);
 
-  // --- 核心修复：优化背景加载逻辑 ---
+  // --- 核心修复：优化背景加载逻辑与缓存隔离 ---
   useEffect(() => {
     const loadBackground = async () => {
       let targetUrl = '';
+      
+      // 1. 确定目标 URL
       if (bgConfig.type === 'upload' && bgConfig.uploadData) {
         targetUrl = bgConfig.uploadData;
       } else if (bgConfig.type === 'bing') {
@@ -334,48 +335,56 @@ export default function App() {
         targetUrl = 'https://t.alcy.cc/ycy';
       }
 
+      // 2. 如果是 Base64 (本地上传)，直接显示，无需缓存逻辑
       if (targetUrl.startsWith('data:')) {
         setActiveBgUrl(targetUrl);
         return;
       }
 
+      // 3. 定义独立的缓存 Key，防止不同模式的图片混用
+      // 以前是 'cached_bg_v1'，现在改为 'cached_bg_v2_bing', 'cached_bg_v2_default' 等
+      const cacheKey = `cached_bg_v2_${bgConfig.type}`;
+
+      // 4. 离线模式：强制使用缓存
       if (!isOnline) {
-         const cachedBg = localStorage.getItem('cached_bg_v1');
+         const cachedBg = localStorage.getItem(cacheKey);
          if (cachedBg) setActiveBgUrl(cachedBg);
          return;
       }
 
-      // 为了用户体验，先显示缓存（即使可能是旧图），然后偷偷加载新图
-      const cachedBg = localStorage.getItem('cached_bg_v1');
+      // 5. 在线模式：优先展示当前模式的缓存 (如果有)，避免白屏
+      const cachedBg = localStorage.getItem(cacheKey);
       if (cachedBg) {
         setActiveBgUrl(cachedBg);
       } else {
-        setActiveBgUrl(targetUrl); 
+        // 关键修复：如果当前模式没有缓存 (比如刚从 Bing 切回 Default)，
+        // 必须立即显示目标 URL，而不是什么都不做 (或者错误地显示了旧的通用缓存)
+        setActiveBgUrl(targetUrl);
       }
 
+      // 6. 异步加载并更新/创建缓存
       const img = new Image();
       img.crossOrigin = "Anonymous"; 
       img.src = targetUrl;
 
-      // 修复：确保加载完成后更新 activeBgUrl
       img.onload = async () => {
         try {
            const base64 = await compressAndCacheImage(targetUrl);
            if (base64) {
-             localStorage.setItem('cached_bg_v1', base64);
-             setActiveBgUrl(base64); // <--- FIX: 成功缓存后，立即更新界面显示新图
+             localStorage.setItem(cacheKey, base64); // 存入独立的 Key
+             setActiveBgUrl(base64); // 更新显示
            } else {
-             // 如果压缩/缓存失败（例如CORS跨域限制），直接显示原 URL
-             // 这样虽然不能缓存，但至少能让用户看到背景切换成功
+             // 跨域等原因导致无法压缩缓存，回退到 URL
              setActiveBgUrl(targetUrl);
            }
         } catch(e) { 
-           // 兜底：发生任何错误都尝试直接显示 URL
+           // 出错回退
            setActiveBgUrl(targetUrl);
         }
       };
 
       img.onerror = () => {
+        // 图片加载失败，如果没有缓存，确保至少尝试显示 URL (虽然可能也显示不出来，但逻辑正确)
         if (!cachedBg) {
             setActiveBgUrl(targetUrl);
         }
