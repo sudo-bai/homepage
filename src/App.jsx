@@ -320,6 +320,7 @@ export default function App() {
     };
   }, []);
 
+  // --- 核心修复：优化背景加载逻辑 ---
   useEffect(() => {
     const loadBackground = async () => {
       let targetUrl = '';
@@ -344,6 +345,7 @@ export default function App() {
          return;
       }
 
+      // 为了用户体验，先显示缓存（即使可能是旧图），然后偷偷加载新图
       const cachedBg = localStorage.getItem('cached_bg_v1');
       if (cachedBg) {
         setActiveBgUrl(cachedBg);
@@ -355,13 +357,22 @@ export default function App() {
       img.crossOrigin = "Anonymous"; 
       img.src = targetUrl;
 
+      // 修复：确保加载完成后更新 activeBgUrl
       img.onload = async () => {
         try {
            const base64 = await compressAndCacheImage(targetUrl);
            if (base64) {
              localStorage.setItem('cached_bg_v1', base64);
+             setActiveBgUrl(base64); // <--- FIX: 成功缓存后，立即更新界面显示新图
+           } else {
+             // 如果压缩/缓存失败（例如CORS跨域限制），直接显示原 URL
+             // 这样虽然不能缓存，但至少能让用户看到背景切换成功
+             setActiveBgUrl(targetUrl);
            }
-        } catch(e) { }
+        } catch(e) { 
+           // 兜底：发生任何错误都尝试直接显示 URL
+           setActiveBgUrl(targetUrl);
+        }
       };
 
       img.onerror = () => {
