@@ -1,0 +1,15 @@
+/* 修复下拉菜单虚影 */
+[class*="bg-slate-950/90"][class*="rounded-xl"][class*="overflow-hidden"] {
+  backdrop-filter: blur(34px) saturate(132%);
+  background: rgba(15, 23, 42, 0.85);
+  contain: layout paint;
+  clip-path: inset(0px -20px -20px -20px);
+}
+
+/* 修复搜索引擎下拉菜单虚影 */
+[class*="bg-slate-950/90"][class*="rounded-b-3xl"] {
+  backdrop-filter: blur(34px) saturate(132%);
+  background: rgba(15, 23, 42, 0.85);
+  contain: layout paint;
+  clip-path: inset(0px -50px -50px -50px);
+}
