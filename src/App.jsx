@@ -120,9 +120,46 @@ const SmartIcon = ({ url, title, customIcon, isOnline }) => {
 
   const handleLoad = async (e) => {
     if (customIcon || isCached || src === 'fallback') return;
-    const currentSrc = e.target.src;
+    if (!isOnline) return;
+    
+    const img = e.target;
+    // 确保图片已成功加载
+    if (!img || img.naturalWidth === 0) return;
+    
     try {
-      if (isOnline) {
+      // 创建canvas来转换图片，避免额外的fetch请求
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      
+      // 设置canvas尺寸为实际图标大小，但限制最大尺寸
+      const maxSize = 64;
+      let width = img.naturalWidth;
+      let height = img.naturalHeight;
+      
+      if (width > maxSize || height > maxSize) {
+        const ratio = Math.min(maxSize / width, maxSize / height);
+        width = Math.floor(width * ratio);
+        height = Math.floor(height * ratio);
+      }
+      
+      canvas.width = width;
+      canvas.height = height;
+      
+      // 绘制图片到canvas
+      ctx.drawImage(img, 0, 0, width, height);
+      
+      // 转换为base64
+      const base64 = canvas.toDataURL('image/png', 0.8);
+      
+      // 检查大小并存储到本地缓存
+      if (base64.length < 100 * 1024) { 
+        localStorage.setItem(cacheKey, base64);
+      }
+    } catch (error) {
+      // 静默失败，可能是canvas被污染（跨域问题）
+      // 回退到原来的fetch方法作为备选方案
+      try {
+        const currentSrc = e.target.src;
         const response = await fetch(currentSrc);
         const blob = await response.blob();
         const reader = new FileReader();
@@ -130,13 +167,15 @@ const SmartIcon = ({ url, title, customIcon, isOnline }) => {
           try {
             const base64 = reader.result;
             if (base64.length < 100 * 1024) { 
-               localStorage.setItem(cacheKey, base64);
+              localStorage.setItem(cacheKey, base64);
             }
           } catch (e) {}
         };
         reader.readAsDataURL(blob);
+      } catch (corsError) {
+        // 如果两种方法都失败，跳过缓存
       }
-    } catch (corsError) {}
+    }
   };
 
   if (src === 'fallback') {
