@@ -592,7 +592,7 @@ export default function App() {
 
       {/* 离线状态指示器 */}
       {!isOnline && (
-        <div className="absolute top-4 right-4 z-50 flex items-center gap-2 px-3 py-1.5 bg-red-500/20 backdrop-blur-md border border-red-500/30 rounded-full text-red-200 text-xs animate-fade-in-down">
+        <div className="absolute top-4 right-4 z-50 flex items-center gap-2 px-3 py-1.5 bg-red-500/20 border border-red-500/30 rounded-full text-red-200 text-xs animate-fade-in-down">
           <WifiOff size={12} />
           <span>离线模式 - 使用本地缓存</span>
         </div>
@@ -602,7 +602,7 @@ export default function App() {
       {contextMenu.visible && (
         <div 
           ref={contextMenuRef}
-          className="fixed z-[100] w-36 bg-black/60 backdrop-blur-xl border border-white/20 rounded-xl shadow-2xl p-1.5 flex flex-col gap-1 animate-fade-in-fast origin-top-left"
+          className="fixed z-[100] w-36 bg-slate-950/90 border border-white/12 rounded-xl shadow-lg p-1.5 flex flex-col gap-1 animate-fade-in-fast origin-top-left"
           style={{ top: contextMenu.y, left: contextMenu.x }}
           onClick={(e) => e.stopPropagation()} 
           onContextMenu={(e) => e.preventDefault()}
@@ -654,9 +654,9 @@ export default function App() {
                 <ChevronDown size={12} className={`opacity-60 transition-transform duration-200 ${isEngineMenuOpen ? 'rotate-180' : ''}`}/>
               </button>
               {isEngineMenuOpen && (
-                <div className="absolute top-full left-0 mt-2 w-32 p-1 bg-black/20 backdrop-blur-xl border border-white/10 rounded-xl overflow-hidden shadow-2xl animate-fade-in-down origin-top-left flex flex-col z-40">
+                <div className="absolute top-full left-0 mt-2 w-32 p-1.5 bg-slate-950/90 border border-white/12 rounded-xl overflow-hidden shadow-lg animate-fade-in-down origin-top-left flex flex-col z-40">
                   {Object.entries(engines).map(([key, engine]) => (
-                    <button key={key} type="button" onClick={() => { setSearchEngine(key); localStorage.setItem('search-engine-pref', key); setIsEngineMenuOpen(false); }} className="w-full px-3 py-2 text-left text-xs text-white/80 hover:bg-white/15 hover:text-white flex items-center justify-between transition-colors focus:outline-none rounded-lg mb-0.5">
+                    <button key={key} type="button" onClick={() => { setSearchEngine(key); localStorage.setItem('search-engine-pref', key); setIsEngineMenuOpen(false); }} className="w-full px-3 py-2 text-left text-xs text-white/80 hover:bg-white/8 hover:text-white flex items-center justify-between transition-colors focus:outline-none rounded-lg mb-0.5 overflow-hidden">
                       <span className="truncate">{engine.name}</span>
                       {searchEngine === key && <Check size={10} className="text-green-400 shrink-0" />}
                     </button>
@@ -677,13 +677,13 @@ export default function App() {
               onClick={() => setShowDashboard(true)}
               placeholder={isOnline ? engines[searchEngine].placeholder : "离线模式"}
               disabled={!isOnline}
-              className={`w-full py-3.5 pl-32 pr-12 backdrop-blur-md text-white placeholder-white/30 shadow-lg focus:outline-none transition-all duration-300 text-sm ${hasSuggestions ? 'bg-black/40 border border-white/20 border-b-0 rounded-t-3xl rounded-b-none focus:shadow-none' : 'bg-black/20 border border-white/10 rounded-full focus:bg-black/40 focus:border-white/30 focus:shadow-2xl'} ${!isOnline ? 'opacity-50 cursor-not-allowed' : ''}`}
+              className={`w-full py-3.5 pl-32 pr-12 text-white placeholder-white/30 shadow-lg focus:outline-none transition-all duration-300 text-sm ${hasSuggestions ? 'bg-black/40 border border-white/20 border-b-0 rounded-t-3xl rounded-b-none focus:shadow-none' : 'bg-black/20 border border-white/10 rounded-full focus:bg-black/40 focus:border-white/30 focus:shadow-2xl'} ${!isOnline ? 'opacity-50 cursor-not-allowed' : ''}`}
               style={{ textAlign: 'center' }} 
             />
             <button type="submit" disabled={!isOnline} className="absolute right-3.5 p-1.5 text-white/40 hover:text-white transition-colors bg-white/5 rounded-full hover:bg-white/10 focus:outline-none"><Search size={16} /></button>
           </form>
           {hasSuggestions && isOnline && (
-            <div className="absolute top-full left-0 w-full bg-black/40 backdrop-blur-md border border-t-0 border-white/20 rounded-b-3xl shadow-xl overflow-hidden z-40 origin-top" style={{ clipPath: 'inset(0px -50px -50px -50px)' }}>
+            <div className="absolute top-full left-0 w-full bg-slate-950/90 border border-t-0 border-white/12 rounded-b-3xl shadow-lg overflow-hidden z-40 origin-top" style={{ clipPath: 'inset(0px -50px -50px -50px)' }}>
               {suggestions.map((suggestion, index) => (
                 <div key={index} onClick={() => { setSearchQuery(suggestion); setShowSuggestions(false); window.location.href = `${engines[searchEngine].url}${encodeURIComponent(suggestion)}`; }} className="px-4 py-2.5 text-sm text-white/80 hover:bg-white/10 hover:text-white cursor-pointer transition-colors flex items-center gap-3">
                   <Search size={12} className="opacity-40" />
@@ -724,9 +724,9 @@ export default function App() {
                 onDragEnter={(e) => handleDragEnter(e, index)}
                 onDragOver={(e) => e.preventDefault()}
                 onDragEnd={handleDragEnd}
-                className={`group relative flex flex-col items-center justify-center p-2 rounded-xl bg-white/5 border border-white/5 backdrop-blur-md shadow-sm transition-all duration-300 h-24 select-none
+                className={`group relative flex flex-col items-center justify-center p-2 rounded-xl bg-white/5 border border-white/5 shadow-sm overflow-hidden transition-all duration-300 h-24 select-none
                   ${isAnimating ? 'animate-bounce-enter' : ''}
-                  ${editMode ? 'animate-shake cursor-move hover:bg-white/20' : 'hover:bg-white/15 hover:scale-105 hover:shadow-lg cursor-pointer'}
+                  ${editMode ? 'animate-shake cursor-move hover:bg-white/20' : 'hover:bg-white/12 hover:scale-[1.03] hover:shadow-md hover:z-10 cursor-pointer'}
                 `}
                 onClick={() => !editMode && window.location.assign(link.url)}
                 onContextMenu={(e) => handleContextMenu(e, link.id)} 
@@ -745,7 +745,7 @@ export default function App() {
                       e.stopPropagation();
                       setLinks(links.filter(l => l.id !== link.id));
                     }}
-                    className="absolute -top-1.5 -left-1.5 bg-white/20 backdrop-blur-md border border-white/20 text-white p-1 rounded-full shadow hover:bg-red-500 hover:border-red-500 transition-colors z-20 animate-bounce-in"
+                    className="absolute -top-1.5 -left-1.5 bg-white/20 border border-white/20 text-white p-1 rounded-full shadow hover:bg-red-500 hover:border-red-500 transition-colors z-20 animate-bounce-in"
                   >
                     <X size={10} />
                   </button>
