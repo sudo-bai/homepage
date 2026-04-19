@@ -1,15 +1,57 @@
-/* 修复下拉菜单虚影 */
-[class*="bg-slate-950/90"][class*="rounded-xl"][class*="overflow-hidden"] {
-  backdrop-filter: blur(34px) saturate(132%);
-  background: rgba(15, 23, 42, 0.85);
-  contain: layout paint;
-  clip-path: inset(0px -20px -20px -20px);
+/* Centralized visual hotfixes for built new-tab app.
+   This project currently only contains built assets, so hover/focus fixes live here
+   instead of being patched repeatedly inside hashed bundles. */
+
+/* Search engine selector pill */
+button[class*="bg-white/10"][class*="hover:bg-white/20"][class*="rounded-full"] {
+  overflow: hidden;
+  isolation: isolate;
+  contain: paint;
+}
+button[class*="bg-white/10"][class*="hover:bg-white/20"][class*="rounded-full"]:hover {
+  background-color: rgba(255, 255, 255, 0.12) !important;
 }
 
-/* 修复搜索引擎下拉菜单虚影 */
-[class*="bg-slate-950/90"][class*="rounded-b-3xl"] {
+/* Search action and small utility buttons */
+button[class*="bg-white/5"][class*="hover:bg-white/10"][class*="rounded-full"],
+button[class*="hover:bg-white/10"][class*="text-white/40"][class*="rounded-full"],
+button[class*="hover:bg-white/10"][class*="hover:border-white/10"][class*="rounded-full"] {
+  overflow: hidden;
+  isolation: isolate;
+  contain: paint;
+}
+button[class*="bg-white/5"][class*="hover:bg-white/10"][class*="rounded-full"]:hover,
+button[class*="hover:bg-white/10"][class*="text-white/40"][class*="rounded-full"]:hover,
+button[class*="hover:bg-white/10"][class*="hover:border-white/10"][class*="rounded-full"]:hover {
+  background-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+/* Dropdown menu panel: keep glass effect but constrain blur to rounded bounds */
+div[class*="bg-slate-950/90"][class*="rounded-xl"][class*="overflow-hidden"] {
+  isolation: isolate;
   backdrop-filter: blur(34px) saturate(132%);
-  background: rgba(15, 23, 42, 0.85);
-  contain: layout paint;
-  clip-path: inset(0px -50px -50px -50px);
+  -webkit-backdrop-filter: blur(34px) saturate(132%);
+  background-color: rgba(15, 23, 42, 0.36) !important;
+  background-clip: padding-box;
+  clip-path: inset(0 round 12px);
+  transform: translate3d(0, 0, 0);
+  contain: layout style paint;
+  will-change: transform, backdrop-filter, top, left;
+}
+
+button[class*="hover:bg-white/8"][class*="rounded-lg"] {
+  overflow: hidden;
+  isolation: isolate;
+  contain: paint;
+}
+
+/* Shortcut cards and add-card button keep rounded clipping and localize hover painting */
+div[class*="rounded-xl bg-white/5 border border-white/5"][class*="hover:bg-white/12"][class*="hover:scale-[1.03]"],
+button[class*="rounded-xl bg-white/5 border border-white/5"][class*="hover:bg-white/12"][class*="hover:scale-[1.03]"],
+button[class*="rounded-xl border border-dashed border-white/10"][class*="hover:bg-white/5"] {
+  overflow: hidden;
+  isolation: isolate;
+  contain: paint;
+  transform: translateZ(0);
+  backface-visibility: hidden;
 }
