@@ -415,12 +415,14 @@ export default function App() {
       // 5. 没有缓存（第一次加载）：检查网络连通性
       const actuallyOnline = await checkRealOnline();
       if (!actuallyOnline) {
-        // 无缓存且无网络：显示纯色背景（activeBgUrl保持空）
-        setActiveBgUrl('');
-        return;
+        // 无缓存且无法确认网络：不要直接清空背景，先尝试直接用URL展示
+        // 这样避免“检测误判导致背景消失”的问题
+        setActiveBgUrl(targetUrl);
+        // 仍然继续后续流程尝试加载并缓存（如果实际上是在线的）
+        // 如果确实离线，img.onload/onerror 会自然失败并保持为URL或空
       }
 
-      // 6. 有网络但无缓存：从API获取图片并缓存
+      // 6. 从API获取图片并缓存
       // 先显示API URL作为占位
       setActiveBgUrl(targetUrl);
       
