@@ -360,15 +360,14 @@ export default function App() {
   }, []);
 
   // --- 核心修复：优化背景加载逻辑与缓存隔离 ---
-  // 关键策略：只缓存第一次获取的随机图片，后续直接使用缓存，不再重复请求API
-  // 网络检测：使用fetch真实测试连通性，而非仅依赖navigator.onLine
+  // 关键策略：只缓存第一次获取的随机图片 URL，后续直接使用缓存，不再重复请求 API
+  // 使用 URL 缓存而非 base64，避免跨域问题导致缓存失败
   useEffect(() => {
     const checkRealOnline = async () => {
       // 快速网络检测：尝试访问百度
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 5000);
-        // 使用no-cors模式进行简单连通性测试
+        const timeoutId = setTimeout(() => controller.abort(), 3000);
         const resp = await fetch('https://www.baidu.com/favicon.ico', {
           mode: 'no-cors',
           signal: controller.signal,
@@ -395,59 +394,54 @@ export default function App() {
         targetUrl = 'https://t.alcy.cc/ycy';
       }
 
-      // 2. 如果是 Base64 (本地上传)，直接显示，无需缓存逻辑
+      // 2. 如果是 Base64 (本地上传)，直接显示
       if (targetUrl.startsWith('data:')) {
         setActiveBgUrl(targetUrl);
         return;
       }
 
-      // 3. 定义独立的缓存 Key
-      const cacheKey = `cached_bg_v2_${bgConfig.type}`;
+      // 3. 定义独立的缓存 Key - 缓存的是 URL 而非 base64
+      const cacheKey = `cached_bg_url_${bgConfig.type}`;
       
-      // 4. 已有缓存：直接使用缓存，不再请求新图片（避免每次新标签页都拉取新随机图）
-      const cachedBg = localStorage.getItem(cacheKey);
-      if (cachedBg) {
-        setActiveBgUrl(cachedBg);
-        // 缓存存在时不再fetch新图片，彻底解决浏览器缓存无限增长的问题
+      // 4. 已有缓存：直接显示缓存的 URL
+      const cachedUrl = localStorage.getItem(cacheKey);
+      if (cachedUrl) {
+        setActiveBgUrl(cachedUrl);
         return;
       }
 
-      // 5. 没有缓存（第一次加载）：检查网络连通性
+      // 5. 没有缓存（第一次）：检测网络
       const actuallyOnline = await checkRealOnline();
-      if (!actuallyOnline) {
-        // 无缓存且无法确认网络：不要直接清空背景，先尝试直接用URL展示
-        // 这样避免“检测误判导致背景消失”的问题
-        setActiveBgUrl(targetUrl);
-        // 仍然继续后续流程尝试加载并缓存（如果实际上是在线的）
-        // 如果确实离线，img.onload/onerror 会自然失败并保持为URL或空
-      }
-
-      // 6. 从API获取图片并缓存
-      // 先显示API URL作为占位
+      
+      // 6. 直接显示目标 URL（无论网络检测结果如何）
       setActiveBgUrl(targetUrl);
       
-      const img = new Image();
-      img.crossOrigin = "Anonymous"; 
-      img.src = targetUrl;
-
-      img.onload = async () => {
+      // 7. 如果是上传的图片 URL（非 Base64），立即缓存
+      if (bgConfig.type === 'upload') {
         try {
-           const base64 = await compressAndCacheImage(targetUrl);
-           if (base64) {
-             localStorage.setItem(cacheKey, base64);
-             setActiveBgUrl(base64);
-           } else {
-             setActiveBgUrl(targetUrl);
-           }
-        } catch(e) { 
-           setActiveBgUrl(targetUrl);
-        }
-      };
+          localStorage.setItem(cacheKey, targetUrl);
+        } catch (e) {}
+        return;
+      }
 
-      img.onerror = () => {
-        // 图片加载失败，保持空背景
-        setActiveBgUrl('');
-      };
+      // 8. 对于 API/Bing 图片：验证图片可加载后再缓存 URL
+      // 只有图片能成功加载才缓存，避免缓存错误的 URL
+      try {
+        const img = new Image();
+        img.onload = () => {
+          try {
+            localStorage.setItem(cacheKey, targetUrl);
+          } catch (e) {}
+        };
+        img.onerror = () => {
+          // 图片加载失败，清除缓存（如果有）
+          try {
+            localStorage.removeItem(cacheKey);
+          } catch (e) {}
+          // 保持显示 targetUrl，让用户至少看到尝试的痕迹
+        };
+        img.src = targetUrl;
+      } catch (e) {}
     };
 
     loadBackground();
