@@ -361,7 +361,7 @@ export default function App() {
 
   // --- 核心修复：优化背景加载逻辑与缓存隔离 ---
   // 关键策略：只缓存第一次获取的随机图片（base64），后续直接使用缓存，不再重复请求 API
-  // 移除 crossOrigin 设置，允许图片正常显示，只是不能跨域读取像素（但我们只需要显示和缓存）
+  // 使用 fetch+blob+FileReader 转 base64，避免 canvas 跨域污染问题
   useEffect(() => {
     const loadBackground = async () => {
       let targetUrl = '';
@@ -393,41 +393,37 @@ export default function App() {
         return;
       }
 
-      // 5. 没有缓存（第一次）：从 URL 加载并转为 base64 缓存
-      // 关键点：不设置 crossOrigin，让浏览器正常加载图片（只是不能读取像素）
-      const img = new Image();
-      // 不设置 img.crossOrigin，让图片可以正常加载显示
-      img.src = targetUrl;
-
-      img.onload = async () => {
-        try {
-          // 创建 canvas 转 base64
-          const canvas = document.createElement('canvas');
-          canvas.width = img.naturalWidth;
-          canvas.height = img.naturalHeight;
-          const ctx = canvas.getContext('2d');
-          ctx.drawImage(img, 0, 0);
-          
-          // 压缩并转 base64
-          const base64 = canvas.toDataURL('image/jpeg', 0.8);
-          if (base64 && base64.length > 1000) {
-            // 确保是有效数据才缓存
+      // 5. 没有缓存（第一次）：先显示 URL，然后异步加载并转 base64
+      // 关键点：先设置 URL 让背景立即显示，避免白屏
+      setActiveBgUrl(targetUrl);
+      
+      try {
+        // 使用 fetch 下载图片为 blob（no-cors模式，只要能下载就行）
+        const response = await fetch(targetUrl, { mode: 'no-cors' });
+        const blob = await response.blob();
+        
+        // 用 FileReader 转 base64
+        const base64 = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result);
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+        
+        if (base64 && base64.length > 1000) {
+          // 确保是有效数据才缓存
+          try {
             localStorage.setItem(cacheKey, base64);
-            setActiveBgUrl(base64);
-          } else {
-            // base64 无效，直接用 URL
-            setActiveBgUrl(targetUrl);
+          } catch (e) {
+            // localStorage 满了，忽略
           }
-        } catch (e) {
-          // 转换失败，使用 URL
-          setActiveBgUrl(targetUrl);
+          // 更新为 base64（可选，保持显示 URL 也可以）
+          // setActiveBgUrl(base64);
         }
-      };
-
-      img.onerror = () => {
-        // 加载失败也保持 targetUrl
-        setActiveBgUrl(targetUrl);
-      };
+      } catch (e) {
+        // fetch 或转换失败，保持显示 URL
+        console.log('背景图缓存失败:', e);
+      }
     };
 
     loadBackground();
