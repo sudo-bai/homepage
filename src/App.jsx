@@ -4,6 +4,7 @@ import {
   Image as ImageIcon, Upload, Monitor, RefreshCw, Edit, 
   ImagePlus, ArrowLeftRight, Grid, WifiOff, Download 
 } from 'lucide-react';
+import './hover-fixes.css';
 
 // --- 工具函数：图片压缩与转Base64 (保持不变) ---
 const compressAndCacheImage = async (imgUrl, quality = 0.6, maxWidth = 1920) => {
@@ -359,7 +360,27 @@ export default function App() {
   }, []);
 
   // --- 核心修复：优化背景加载逻辑与缓存隔离 ---
+  // 关键策略：只缓存第一次获取的随机图片，后续直接使用缓存，不再重复请求API
+  // 网络检测：使用fetch真实测试连通性，而非仅依赖navigator.onLine
   useEffect(() => {
+    const checkRealOnline = async () => {
+      // 快速网络检测：尝试访问百度
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000);
+        // 使用no-cors模式进行简单连通性测试
+        const resp = await fetch('https://www.baidu.com/favicon.ico', {
+          mode: 'no-cors',
+          signal: controller.signal,
+          cache: 'no-store'
+        });
+        clearTimeout(timeoutId);
+        return true;
+      } catch (e) {
+        return false;
+      }
+    };
+
     const loadBackground = async () => {
       let targetUrl = '';
       
@@ -380,28 +401,29 @@ export default function App() {
         return;
       }
 
-      // 3. 定义独立的缓存 Key，防止不同模式的图片混用
-      // 以前是 'cached_bg_v1'，现在改为 'cached_bg_v2_bing', 'cached_bg_v2_default' 等
+      // 3. 定义独立的缓存 Key
       const cacheKey = `cached_bg_v2_${bgConfig.type}`;
-
-      // 4. 离线模式：强制使用缓存
-      if (!isOnline) {
-         const cachedBg = localStorage.getItem(cacheKey);
-         if (cachedBg) setActiveBgUrl(cachedBg);
-         return;
-      }
-
-      // 5. 在线模式：优先展示当前模式的缓存 (如果有)，避免白屏
+      
+      // 4. 已有缓存：直接使用缓存，不再请求新图片（避免每次新标签页都拉取新随机图）
       const cachedBg = localStorage.getItem(cacheKey);
       if (cachedBg) {
         setActiveBgUrl(cachedBg);
-      } else {
-        // 关键修复：如果当前模式没有缓存 (比如刚从 Bing 切回 Default)，
-        // 必须立即显示目标 URL，而不是什么都不做 (或者错误地显示了旧的通用缓存)
-        setActiveBgUrl(targetUrl);
+        // 缓存存在时不再fetch新图片，彻底解决浏览器缓存无限增长的问题
+        return;
       }
 
-      // 6. 异步加载并更新/创建缓存
+      // 5. 没有缓存（第一次加载）：检查网络连通性
+      const actuallyOnline = await checkRealOnline();
+      if (!actuallyOnline) {
+        // 无缓存且无网络：显示纯色背景（activeBgUrl保持空）
+        setActiveBgUrl('');
+        return;
+      }
+
+      // 6. 有网络但无缓存：从API获取图片并缓存
+      // 先显示API URL作为占位
+      setActiveBgUrl(targetUrl);
+      
       const img = new Image();
       img.crossOrigin = "Anonymous"; 
       img.src = targetUrl;
@@ -410,28 +432,24 @@ export default function App() {
         try {
            const base64 = await compressAndCacheImage(targetUrl);
            if (base64) {
-             localStorage.setItem(cacheKey, base64); // 存入独立的 Key
-             setActiveBgUrl(base64); // 更新显示
+             localStorage.setItem(cacheKey, base64);
+             setActiveBgUrl(base64);
            } else {
-             // 跨域等原因导致无法压缩缓存，回退到 URL
              setActiveBgUrl(targetUrl);
            }
         } catch(e) { 
-           // 出错回退
            setActiveBgUrl(targetUrl);
         }
       };
 
       img.onerror = () => {
-        // 图片加载失败，如果没有缓存，确保至少尝试显示 URL (虽然可能也显示不出来，但逻辑正确)
-        if (!cachedBg) {
-            setActiveBgUrl(targetUrl);
-        }
+        // 图片加载失败，保持空背景
+        setActiveBgUrl('');
       };
     };
 
     loadBackground();
-  }, [bgConfig, isOnline]);
+  }, [bgConfig]);
 
 
   useEffect(() => {
