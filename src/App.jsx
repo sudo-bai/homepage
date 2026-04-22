@@ -319,7 +319,7 @@ export default function App() {
 
 
   useEffect(() => {
-    document.title = "Skadi's home page";
+    document.title = "OnePage";
     const link = document.querySelector("link[rel~='icon']") || document.createElement('link');
     link.type = 'image/png';
     link.rel = 'icon';
@@ -803,7 +803,7 @@ export default function App() {
       </div>
 
       <div className={`absolute bottom-4 text-white/20 text-[10px] font-light tracking-widest transition-opacity duration-300 ${showDashboard ? 'opacity-100' : 'opacity-0'}`}>
-        Skadi's home page
+        OnePage
       </div>
 
       {/* 弹窗组件 (保持不变) */}
