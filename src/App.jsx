@@ -360,26 +360,9 @@ export default function App() {
   }, []);
 
   // --- 核心修复：优化背景加载逻辑与缓存隔离 ---
-  // 关键策略：只缓存第一次获取的随机图片 URL，后续直接使用缓存，不再重复请求 API
-  // 使用 URL 缓存而非 base64，避免跨域问题导致缓存失败
+  // 关键策略：只缓存第一次获取的随机图片（base64），后续直接使用缓存，不再重复请求 API
+  // 移除 crossOrigin 设置，允许图片正常显示，只是不能跨域读取像素（但我们只需要显示和缓存）
   useEffect(() => {
-    const checkRealOnline = async () => {
-      // 快速网络检测：尝试访问百度
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 3000);
-        const resp = await fetch('https://www.baidu.com/favicon.ico', {
-          mode: 'no-cors',
-          signal: controller.signal,
-          cache: 'no-store'
-        });
-        clearTimeout(timeoutId);
-        return true;
-      } catch (e) {
-        return false;
-      }
-    };
-
     const loadBackground = async () => {
       let targetUrl = '';
       
@@ -400,48 +383,51 @@ export default function App() {
         return;
       }
 
-      // 3. 定义独立的缓存 Key - 缓存的是 URL 而非 base64
-      const cacheKey = `cached_bg_url_${bgConfig.type}`;
+      // 3. 定义独立的缓存 Key - 缓存 base64 数据
+      const cacheKey = `cached_bg_b64_${bgConfig.type}`;
       
-      // 4. 已有缓存：直接显示缓存的 URL
-      const cachedUrl = localStorage.getItem(cacheKey);
-      if (cachedUrl) {
-        setActiveBgUrl(cachedUrl);
+      // 4. 已有缓存：直接显示缓存的 base64 图片
+      const cachedB64 = localStorage.getItem(cacheKey);
+      if (cachedB64) {
+        setActiveBgUrl(cachedB64);
         return;
       }
 
-      // 5. 没有缓存（第一次）：检测网络
-      const actuallyOnline = await checkRealOnline();
-      
-      // 6. 直接显示目标 URL（无论网络检测结果如何）
-      setActiveBgUrl(targetUrl);
-      
-      // 7. 如果是上传的图片 URL（非 Base64），立即缓存
-      if (bgConfig.type === 'upload') {
+      // 5. 没有缓存（第一次）：从 URL 加载并转为 base64 缓存
+      // 关键点：不设置 crossOrigin，让浏览器正常加载图片（只是不能读取像素）
+      const img = new Image();
+      // 不设置 img.crossOrigin，让图片可以正常加载显示
+      img.src = targetUrl;
+
+      img.onload = async () => {
         try {
-          localStorage.setItem(cacheKey, targetUrl);
-        } catch (e) {}
-        return;
-      }
+          // 创建 canvas 转 base64
+          const canvas = document.createElement('canvas');
+          canvas.width = img.naturalWidth;
+          canvas.height = img.naturalHeight;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0);
+          
+          // 压缩并转 base64
+          const base64 = canvas.toDataURL('image/jpeg', 0.8);
+          if (base64 && base64.length > 1000) {
+            // 确保是有效数据才缓存
+            localStorage.setItem(cacheKey, base64);
+            setActiveBgUrl(base64);
+          } else {
+            // base64 无效，直接用 URL
+            setActiveBgUrl(targetUrl);
+          }
+        } catch (e) {
+          // 转换失败，使用 URL
+          setActiveBgUrl(targetUrl);
+        }
+      };
 
-      // 8. 对于 API/Bing 图片：验证图片可加载后再缓存 URL
-      // 只有图片能成功加载才缓存，避免缓存错误的 URL
-      try {
-        const img = new Image();
-        img.onload = () => {
-          try {
-            localStorage.setItem(cacheKey, targetUrl);
-          } catch (e) {}
-        };
-        img.onerror = () => {
-          // 图片加载失败，清除缓存（如果有）
-          try {
-            localStorage.removeItem(cacheKey);
-          } catch (e) {}
-          // 保持显示 targetUrl，让用户至少看到尝试的痕迹
-        };
-        img.src = targetUrl;
-      } catch (e) {}
+      img.onerror = () => {
+        // 加载失败也保持 targetUrl
+        setActiveBgUrl(targetUrl);
+      };
     };
 
     loadBackground();
