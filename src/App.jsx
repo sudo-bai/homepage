@@ -6,6 +6,9 @@ import {
 } from 'lucide-react';
 import './hover-fixes.css';
 
+// 背景图缓存：只保留最后一张网络背景图，供离线时兜底显示
+const BG_CACHE_KEY = 'cached_bg_b64';
+
 // --- 工具函数：图片压缩与转Base64 (保持不变) ---
 const compressAndCacheImage = async (imgUrl, quality = 0.6, maxWidth = 1920) => {
   try {
@@ -42,142 +45,79 @@ const compressAndCacheImage = async (imgUrl, quality = 0.6, maxWidth = 1920) => 
   }
 };
 
-// --- 组件：智能图标 (保持不变) ---
-const SmartIcon = ({ url, title, customIcon, isOnline }) => {
+// --- 工具：Blob 转 Base64 ---
+const blobToDataURL = (blob) => new Promise((resolve, reject) => {
+  const reader = new FileReader();
+  reader.onloadend = () => resolve(reader.result);
+  reader.onerror = reject;
+  reader.readAsDataURL(blob);
+});
+
+// --- 工具：带超时的 fetch，避免某个图标源卡死拖慢整页 ---
+const fetchWithTimeout = (resource, ms = 5000) => {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  return fetch(resource, { signal: controller.signal }).finally(() => clearTimeout(timer));
+};
+
+// --- 组件：智能图标 ---
+// 策略：缓存命中直接显示（秒开）；未命中则依次尝试图标源，抓到图后转 base64 显示并缓存。
+// 原实现先把 <img> 指向 api.uomg.com，第一张图要等它超时（实测 ~10s）才轮到后备源，
+// 且最终成功的站点 favicon 因跨域无法转 base64，导致永远写不进缓存、每次都要重来。
+const SmartIcon = ({ url, title, customIcon }) => {
   const [src, setSrc] = useState('');
-  const [retryCount, setRetryCount] = useState(0);
-  const [isCached, setIsCached] = useState(false);
 
-  const getHostname = (link) => {
-    try { return new URL(link).hostname; } catch (e) { return ''; }
-  };
-
-  const hostname = getHostname(url);
-  const cacheKey = `fav_cache_v2_${hostname}`; 
+  const hostname = (() => {
+    try { return new URL(url).hostname; } catch (e) { return ''; }
+  })();
+  const cacheKey = `fav_cache_v2_${hostname}`;
 
   useEffect(() => {
-    if (customIcon) {
-      setSrc(customIcon);
-      setIsCached(true);
-      return;
-    }
-    if (!url || !hostname) return;
+    let cancelled = false;
 
+    if (customIcon) { setSrc(customIcon); return; }
+    if (!url || !hostname) { setSrc('fallback'); return; }
+
+    // 1) 命中缓存：直接使用，不再发起任何网络请求
     try {
       const cachedData = localStorage.getItem(cacheKey);
-      if (cachedData) {
-        setSrc(cachedData);
-        setIsCached(true);
-        return; 
-      }
+      if (cachedData) { setSrc(cachedData); return; }
     } catch (e) {}
 
-    if (!isOnline) {
-      setSrc('fallback');
-      return;
-    }
+    // 2) 候选图标源：优先站点自身的 favicon.ico（最快最准），再退回第三方服务
+    let origin = '';
+    try { origin = new URL(url).origin; } catch (e) {}
+    const candidates = [];
+    if (origin) candidates.push(`${origin}/favicon.ico`);
+    candidates.push(`https://favicon.im/${hostname}?larger=true`);
+    candidates.push(`https://icons.duckduckgo.com/ip3/${hostname}.ico`);
 
-    setSrc(`https://api.uomg.com/api/get.favicon?url=${encodeURIComponent(url)}`);
-    setRetryCount(0);
-    setIsCached(false);
-  }, [url, hostname, customIcon, isOnline]);
-
-  const handleError = () => {
-    if (!isOnline && isCached) return; 
-
-    if (customIcon || isCached) {
-      if (customIcon) { setSrc('fallback'); return; }
-      localStorage.removeItem(cacheKey);
-      setIsCached(false);
-      
-      if (isOnline) {
-        setRetryCount(0);
-        setSrc(`https://api.uomg.com/api/get.favicon?url=${encodeURIComponent(url)}`);
-      } else {
-        setSrc('fallback');
-      }
-      return;
-    }
-
-    if (isOnline) {
-      if (retryCount === 0) {
-        setSrc(`https://api.iowen.cn/favicon/${hostname}.png`);
-        setRetryCount(1);
-      } else if (retryCount === 1) {
+    (async () => {
+      for (const candidate of candidates) {
         try {
-          const urlObj = new URL(url);
-          setSrc(`${urlObj.origin}/favicon.ico`);
+          const response = await fetchWithTimeout(candidate, 5000);
+          const blob = await response.blob();
+          const base64 = await blobToDataURL(blob);
+          if (cancelled) return;
+          // 过滤空响应，以及站点对未知路径返回的 HTML 404 页
+          if (base64 && base64.length > 100 && !base64.startsWith('data:text/html')) {
+            setSrc(base64);
+            try { localStorage.setItem(cacheKey, base64); } catch (e) {}
+            return;
+          }
         } catch (e) {
-          setSrc('fallback');
+          // 该源失败，继续尝试下一个
         }
-        setRetryCount(2);
-      } else {
-        setSrc('fallback');
       }
-    } else {
-      setSrc('fallback');
-    }
-  };
+      if (!cancelled) setSrc('fallback');
+    })();
 
-  const handleLoad = async (e) => {
-    if (customIcon || isCached || src === 'fallback') return;
-    if (!isOnline) return;
-    
-    const img = e.target;
-    // 确保图片已成功加载
-    if (!img || img.naturalWidth === 0) return;
-    
-    try {
-      // 创建canvas来转换图片，避免额外的fetch请求
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      
-      // 设置canvas尺寸为实际图标大小，但限制最大尺寸
-      const maxSize = 64;
-      let width = img.naturalWidth;
-      let height = img.naturalHeight;
-      
-      if (width > maxSize || height > maxSize) {
-        const ratio = Math.min(maxSize / width, maxSize / height);
-        width = Math.floor(width * ratio);
-        height = Math.floor(height * ratio);
-      }
-      
-      canvas.width = width;
-      canvas.height = height;
-      
-      // 绘制图片到canvas
-      ctx.drawImage(img, 0, 0, width, height);
-      
-      // 转换为base64
-      const base64 = canvas.toDataURL('image/png', 0.8);
-      
-      // 检查大小并存储到本地缓存
-      if (base64.length < 100 * 1024) { 
-        localStorage.setItem(cacheKey, base64);
-      }
-    } catch (error) {
-      // 静默失败，可能是canvas被污染（跨域问题）
-      // 回退到原来的fetch方法作为备选方案
-      try {
-        const currentSrc = e.target.src;
-        const response = await fetch(currentSrc);
-        const blob = await response.blob();
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          try {
-            const base64 = reader.result;
-            if (base64.length < 100 * 1024) { 
-              localStorage.setItem(cacheKey, base64);
-            }
-          } catch (e) {}
-        };
-        reader.readAsDataURL(blob);
-      } catch (corsError) {
-        // 如果两种方法都失败，跳过缓存
-      }
-    }
-  };
+    return () => { cancelled = true; };
+  }, [url, hostname, customIcon]);
+
+  if (!src) {
+    return <div className="w-full h-full" />;
+  }
 
   if (src === 'fallback') {
     return (
@@ -188,14 +128,17 @@ const SmartIcon = ({ url, title, customIcon, isOnline }) => {
   }
 
   return (
-    <img 
-      src={src} 
-      alt={title} 
+    <img
+      src={src}
+      alt={title}
       className="w-full h-full object-contain rounded-sm"
-      onError={handleError}
-      onLoad={handleLoad}
+      onError={() => {
+        if (customIcon) { setSrc('fallback'); return; }
+        try { localStorage.removeItem(cacheKey); } catch (e) {}
+        setSrc('fallback');
+      }}
       loading="lazy"
-      draggable="false" 
+      draggable="false"
     />
   );
 };
@@ -230,10 +173,15 @@ export default function App() {
   const searchContainerRef = useRef(null);
   const hasSuggestions = showSuggestions && suggestions.length > 0;
 
-  const [bgConfig, setBgConfig] = useState({
-    type: 'default', 
-    customApi: 'https://t.alcy.cc/ycy',
-    uploadData: '' 
+  // 直接从 localStorage 初始化，避免挂载后再 setBgConfig 造成多余的渲染/重复请求
+  const [bgConfig, setBgConfig] = useState(() => {
+    const fallback = { type: 'default', customApi: 'https://t.alcy.cc/ycy', uploadData: '' };
+    try {
+      const saved = localStorage.getItem('bg-config');
+      return saved ? { ...fallback, ...JSON.parse(saved) } : fallback;
+    } catch {
+      return fallback;
+    }
   });
   const [activeBgUrl, setActiveBgUrl] = useState(''); 
 
@@ -339,12 +287,12 @@ export default function App() {
       else setSearchEngine(savedEngine);
     }
 
-    const savedBgConfig = localStorage.getItem('bg-config');
-    if (savedBgConfig) {
-      setBgConfig(JSON.parse(savedBgConfig));
-    }
-    // 注意：初始加载背景的逻辑现在完全移交给了下面的 useEffect(loadBackground) 处理，
-    // 这里不再读取旧的 'cached_bg_v1'，避免污染。
+    // 清理历史遗留的背景缓存（旧的按类型分键 + cached_bg_v1），统一改为单张缓存
+    try {
+      Object.keys(localStorage)
+        .filter(k => (k.startsWith('cached_bg_b64_') || k === 'cached_bg_v1'))
+        .forEach(k => localStorage.removeItem(k));
+    } catch {}
     
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
@@ -359,13 +307,16 @@ export default function App() {
     };
   }, []);
 
-  // --- 核心修复：优化背景加载逻辑与缓存隔离 ---
-  // 关键策略：只缓存第一次获取的随机图片（base64），后续直接使用缓存，不再重复请求 API
-  // 使用 fetch+blob+FileReader 转 base64，避免 canvas 跨域污染问题
+  // --- 背景加载：每次尝试联网取新图并覆盖缓存，联网失败（断网）才回退到缓存 ---
+  // 缓存只保留「最后一张」网络背景图（BG_CACHE_KEY），用于断网时兜底显示。
+  // 不依赖 navigator.onLine 判断在线/离线（该信号并不总是可靠），
+  // 而是直接请求：成功就用新图，失败就说明断网，改用缓存。
   useEffect(() => {
+    let cancelled = false;
+
     const loadBackground = async () => {
       let targetUrl = '';
-      
+
       // 1. 确定目标 URL
       if (bgConfig.type === 'upload' && bgConfig.uploadData) {
         targetUrl = bgConfig.uploadData;
@@ -377,57 +328,56 @@ export default function App() {
         targetUrl = 'https://t.alcy.cc/ycy';
       }
 
-      // 2. 如果是 Base64 (本地上传)，直接显示
+      // 2. 本地上传本身就是 Base64，直接显示，不参与网络缓存
       if (targetUrl.startsWith('data:')) {
         setActiveBgUrl(targetUrl);
         return;
       }
 
-      // 3. 定义独立的缓存 Key - 缓存 base64 数据
-      const cacheKey = `cached_bg_b64_${bgConfig.type}`;
-      
-      // 4. 已有缓存：直接显示缓存的 base64 图片
-      const cachedB64 = localStorage.getItem(cacheKey);
-      if (cachedB64) {
-        setActiveBgUrl(cachedB64);
-        return;
-      }
+      // 3. 先显示上一张缓存，避免白屏；没有缓存就先空着，等新图加载
+      let cachedB64 = null;
+      try { cachedB64 = localStorage.getItem(BG_CACHE_KEY); } catch {}
+      if (cachedB64) setActiveBgUrl(cachedB64);
 
-      // 5. 没有缓存（第一次）：先显示 URL，然后异步加载并转 base64
-      // 关键点：先设置 URL 让背景立即显示，避免白屏
-      setActiveBgUrl(targetUrl);
-      
       try {
-        // 使用 fetch 下载图片为 blob（no-cors模式，只要能下载就行）
-        const response = await fetch(targetUrl, { mode: 'no-cors' });
+        // 4. cors 模式 + no-store：绕过 HTTP 缓存，保证每次都是新图。
+        //    注意 no-cors 会返回 opaque 响应（body 为空、转不出 base64），所以必须用 cors；
+        //    相关域名已通过 manifest 的 host_permissions 授权。
+        const response = await fetch(targetUrl, { cache: 'no-store' });
         const blob = await response.blob();
-        
-        // 用 FileReader 转 base64
+
         const base64 = await new Promise((resolve, reject) => {
           const reader = new FileReader();
           reader.onloadend = () => resolve(reader.result);
           reader.onerror = reject;
           reader.readAsDataURL(blob);
         });
-        
+
+        if (cancelled) return;
+
         if (base64 && base64.length > 1000) {
-          // 确保是有效数据才缓存
+          // 显示真正拉取到的那张图，保证「显示 = 缓存 = 最新」
+          setActiveBgUrl(base64);
           try {
-            localStorage.setItem(cacheKey, base64);
-          } catch (e) {
-            // localStorage 满了，忽略
+            localStorage.setItem(BG_CACHE_KEY, base64);
+          } catch {
+            // localStorage 满了：先清掉旧缓存再重试一次
+            try {
+              localStorage.removeItem(BG_CACHE_KEY);
+              localStorage.setItem(BG_CACHE_KEY, base64);
+            } catch {}
           }
-          // 更新为 base64（可选，保持显示 URL 也可以）
-          // setActiveBgUrl(base64);
         }
       } catch (e) {
-        // fetch 或转换失败，保持显示 URL
+        // 5. 联网失败（断网/被拦截）：保留缓存；连缓存都没有时退回直连 URL
+        if (!cachedB64) setActiveBgUrl(targetUrl);
         console.log('背景图缓存失败:', e);
       }
     };
 
     loadBackground();
-  }, [bgConfig]);
+    return () => { cancelled = true; };
+  }, [bgConfig, isOnline]);
 
 
   useEffect(() => {
